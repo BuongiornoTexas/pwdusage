@@ -1,6 +1,6 @@
----
+<!---
 # cspell: ignore venv beautifulsoup tzdata numpy simplejson datasource
---- 
+---> 
 
 # Powerwall-Dashboard-usage-proxy
 
@@ -17,17 +17,20 @@ This is a TODO list for @BuongiornoTexas. Everyone else please ignore (unless yo
 to help with development ...). Sorry for putting
 it here, but I need to keep this top of mind for implementation.
 
-- Implement resampling/aggregation so that bar charts > 24h are meaningful. Should be 
-quick (expect update in next few days).
+- Convert usage.json to usage_example.json, and then add docs for user to copy/rename
+to usage.json. Also set up environment variable to read usage.json - required for
+docker.
+- Detail USAGE_JSON environment variable for docker build. 
+- Set up an environment variable for `usage.json` so it can be loaded from the docker
+container?
 - Fix `server.py` do_GET error response - right now do_GET always returns 200 even on
 invalid page. So Json Data source will always return working even if it is not! 
 I think this may also be eating some configuration error messages?
-- Decide best approach for https server. Don't want to be carrying duplicate code base
-if possible?
-- Set up an environment variable for `usage.json` so it can be loaded from the docker
-container?
+- Implement resampling/aggregation so that bar charts > 24h are meaningful. Should be 
+quick (expect update in next few days).
+- Decide/fix best approach for https server. Don't want to be carrying duplicate code base
+if possible? Is the only thing needed a certificate `.pem` file?
 - Address other changes needed to get code docker compatible.
-- Reset time zone (America/Los_Angeles) and url in usage.json (localhost:8086).
 - Maybes/future functions?:
   - Implement mechanism to dump data frame to file for debugging?
   - Add query payload to allow user to limit return to either cost or energy data only?
@@ -79,8 +82,8 @@ the historical data may not reflect optimisation for the tariff).
 TODO: Assuming there is user support and enthusiasm for the usage engine, it should be
 integrated into the main pypowerwall codebase. Until that time, users will either need 
 to prepare a custom docker image, or follow the 
-["Installation for test users"](#installation-for-test-users) instructions below to 
-setup a stand alone pypowerwall server instance for running the usage engine.
+["Installation for test users"](#installation-for-developmenttesting) instructions below
+to setup a stand alone pypowerwall server instance for running the usage engine.
 
 
 # Configuration
@@ -89,17 +92,28 @@ Because there are so many different tariffs, configuration will require setting 
 `usage.json` file to define usage plans and calendars, and you will very likely also
 need to do some customisation in grafana to get report out in the format you prefer.
 
+This repository contains a file named `example_usage.json` that you can use to build
+your own `usage.json`. If you are running a stand alone server, use `USAGE_JSON` to
+specify the path to your configuration file (the environment variable must specify the 
+path and the file name, and you may use a different file name if you prefer). If you do
+not specify the environment variable it will default to it will default to searching 
+for `usage.json` in the python working directory. 
+
+If you are running the usage engine from a docker instance, you **must** specify the 
+`USAGE_JSON` environment variable, as there is no default configuration file. TODO more 
+detail on USAGE_JSON environment variable for docker build. 
+
 While most of the heavy lifting is done in the `usage.json` file, this configuration 
-file depends heavily on constants defined in `usage_common.py`. The next sections
+file depends heavily on constants defined in `common.py`. The next sections
 details these constants, the structure of `usage.json`, and finally outlines grafana
 customisation steps.
 
-## Strings from usage_common.py
+## Strings from `common.py`
 
-The strings defined in the `PDColName` Enum in `usage_common.py` are labels for key 
-calculated data columns in the usage engine. You may choose to output any subset of the 
-numeric calculations, and you can also change the default names of the outputs to
-your preferred labels.
+The strings defined in the `PDColName` Enum in `common.py` are labels for key calculated
+data columns in the usage engine. You may choose to output any subset of the numeric
+calculations, and you can also change the default names of the outputs to your
+preferred labels.
 
 The following table summarises the strings available as at 13 May 2023. This set may be
 extended in future.
@@ -192,9 +206,9 @@ default, which provides data on an hourly basis).
 - `cost_unit` and `energy_unit` - **optional** string appended to the series labels 
 for usage cost and energy data. Default to "$" and "kWh".
 - `rename` - An **optional** dictionary that allows replacement of the default strings 
-defined in `usage_common.py`. If you want to have a new label string for the 
-`"SOLAR_SUPPLY"`, you can go nuts. Be my guest. The boring example above adds multiple - 
-and + signs to the strings for grid supply and grid export. 
+defined in `common.py`. If you want to have a new label string for the `"SOLAR_SUPPLY"`,
+you can go nuts. Be my guest. The boring example above adds multiple - and + signs to
+the strings for grid supply and grid export. 
 
 Finally, `"supplyPriority"` is an **optional** entry that provides the order in which
 supply is allocated to meet home demand for power. If specified, the entry **must** be a
@@ -338,7 +352,7 @@ The following points provide more detail on these elements:
 "Aurora-TAS-ToU" for the Tasmanian Aurora time of use plan. 
 - [**required**] "report" lists the energy variables that you want reported to grafana
 for the plan. Available variables are defined in 
-[`usage_common.py`](#strings-from-usage_commonpy) strings above. Note: a) you must specify 
+[`common.py`](#strings-from-commonpy) strings above. Note: a) you must specify 
 at least one report variable even if you do not plan to use these variables, and b)
 Cost/savings variables are specified in the calendar section.
 - [**required**] "agent" specifies the usage agent for calculating costs. Right now, 
@@ -445,7 +459,7 @@ table, but you can ignore cost output in your final dashboard.
 See the following section for a discussion of how the simple usage agent works and for a 
 discussion of why I use the special variables `SELF_SOLAR_PLUS_RES` and 
 `SELF_PW_NET_OF_GRID` in my savings calculations (if you don't like my logic, you can
-use any of the other variables specified in `usage_common.py` instead).
+use any of the other variables specified in `common.py` instead).
 
 The second and following calendar entries operate by difference to the previous entry in
 calendar order. You may specify any or all of the elements required for the first entry,
@@ -538,7 +552,7 @@ alternative is to implement a better usage agent yourself (offers welcomed!).
 
 Right now, I have only implemented the simple usage agent detailed in the previous 
 section. However, the system provides hooks for extension with additional usage agents. 
-If you know your way around python, you can follow the structure of `usage_simple.py` to
+If you know your way around python, you can follow the structure of `simple_agent.py` to
 build your own agent (if not, let me know via an issue and I'll see if I can help built
 an agent for your use case).
 
@@ -567,10 +581,10 @@ host as your main pypowerwall docker instance).
 
 TODO write this section.
 
-In the interim, I've provided example dashboard called `usage_example.json`. Import this
-into grafana and have an explore.
+In the interim, I've provided example dashboard called `example_dashboard.json`. Import
+this into grafana and have an explore.
 
-# Installation for test users 
+# Installation for development/testing 
 
 As I'm doing this development on a windows machine and don't want to deal with 
 repeatedly creating multiple docker containers, I run a stand alone test server. Unless
@@ -582,29 +596,23 @@ development and testing. The main steps are:
 
    `py -m venv usage_test`
 
-- Activate your environment and install simplejson, pypowerwall, beautifulsoup4 (bs4, 
-which is not installed with pypowerwall), and the influxdb Flux client (I'm running 
-without the high efficiency c iso 8601 library for now). The `[extra]` also installs 
-numpy and pandas.You may also need to install `tzdata` (I did on windows in the early 
-stages, but haven't had trouble since - if you get errors about time zones, this is 
-probably it). 
+- Activate your environment and install simplejson, and the influxdb Flux client (I'm
+running without the high efficiency c iso 8601 library for now). The `[extra]` also 
+installs numpy and pandas.You may also need to install `tzdata` (I did on windows in the
+early stages, but haven't had trouble since - if you get errors about time zones, this
+is probably it). 
 
   `pip install simplejson`
 
-  `pip install pypowerwall`
-
-  `pip install beautifulsoup4`
-
   `pip install influxdb-client[extra]`
 
-- Clone my (@BuongiornoTexas) pypowerwall repository to a working directory (you 
-probably only need the proxy server directory - everything else you use should come from
-the OG pypowerwall installed in the previous step). 
+- Clone my (@BuongiornoTexas) usage engine repository to a working directory. 
 
-- Configure your test server, which duplicates the pypowerwall server used by the
-dashboard. **VERY IMPORTANT**: If you are running on the same machine as your dashboard,
-you need to override the default port (8675). For example, my vscode `launch.json` sets
-up the powerwall login information and specifies port 9050 for the test server: 
+- Configure your test server, which is a cut down version of the pypowerwall server used
+by the dashboard. You can specify environment variables for the the server bind address,
+debugging, server port and HTTPS mode [TODO - https is not working at the moment] 
+(`USAGE_BIND_ADDRESS, USAGE_DEBUG, USAGE_PORT, USAGE_HTTPS`). For example, my vscode 
+`launch.json` specifies port 9050 (the default) for the test server: 
 ```
 {
     "version": "0.2.0",
@@ -617,11 +625,7 @@ up the powerwall login information and specifies port 9050 for the test server:
             "console": "integratedTerminal",
             "justMyCode": true,
             "env": {
-                "PW_HOST": "powerwall.ip.address.xx",
-                "PW_EMAIL": "xxx.xxx@xxxx.com",
-                "PW_PASSWORD": "powerwall password",
-                "PW_TIMEZONE": "Australia/Hobart",
-                "PW_PORT": "9050"
+                "USAGE_PORT": "9050"
             }
         }
     ]
