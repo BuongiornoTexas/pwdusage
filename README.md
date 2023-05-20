@@ -17,25 +17,22 @@ This is a TODO list for @BuongiornoTexas. Everyone else please ignore (unless yo
 to help with development ...). Sorry for putting
 it here, but I need to keep this top of mind for implementation.
 
-- Convert usage.json to usage_example.json, and then add docs for user to copy/rename
-to usage.json. Also set up environment variable to read usage.json - required for
-docker.
-- Detail USAGE_JSON environment variable for docker build. 
-- Set up an environment variable for `usage.json` so it can be loaded from the docker
-container?
 - Fix `server.py` do_GET error response - right now do_GET always returns 200 even on
 invalid page. So Json Data source will always return working even if it is not! 
 I think this may also be eating some configuration error messages?
 - Implement resampling/aggregation so that bar charts > 24h are meaningful. Should be 
 quick (expect update in next few days).
-- Decide/fix best approach for https server. Don't want to be carrying duplicate code base
-if possible? Is the only thing needed a certificate `.pem` file?
+- Detail `USAGE_JSON` environment variable for docker build - specifically, what needs
+to be set up so docker sees the file in the local file system. And, you know, test 
+that it actually works.
 - Address other changes needed to get code docker compatible.
 - Maybes/future functions?:
   - Implement mechanism to dump data frame to file for debugging?
   - Add query payload to allow user to limit return to either cost or energy data only?
   - Add query payload to allow user to request summary data (totals) only?
   - Add query payload to allow user to request raw data without aggregation?
+- Decide/fix best approach for https server. Don't want to be carrying duplicate code
+base if possible? Is the only thing needed a certificate `.pem` file?
 
 # Usage Engine for pypowerwall server
 
@@ -275,7 +272,8 @@ home less any grid charging of the powerwall in the reporting period. See discus
 powerwall savings in the calendar section for the reason for this variable and its
 (optional) usage.
 
-Final note: The usage engine does not try to reconcile the energy balance (out of scope).
+Final note: The usage engine does not try to reconcile the energy balance (out of
+scope).
 
 ### Plans section
 
@@ -609,10 +607,11 @@ is probably it).
 - Clone my (@BuongiornoTexas) usage engine repository to a working directory. 
 
 - Configure your test server, which is a cut down version of the pypowerwall server used
-by the dashboard. You can specify environment variables for the the server bind address,
-debugging, server port and HTTPS mode [TODO - https is not working at the moment] 
-(`USAGE_BIND_ADDRESS, USAGE_DEBUG, USAGE_PORT, USAGE_HTTPS`). For example, my vscode 
-`launch.json` specifies port 9050 (the default) for the test server: 
+by the dashboard. You can specify environment variables for the the JSON configuration
+file, server bind address, debugging, server port and HTTPS mode [TODO - https is not
+working at the moment] (`USAGE_JSON, USAGE_BIND_ADDRESS, USAGE_DEBUG, USAGE_PORT, 
+USAGE_HTTPS`). For example, my vscode `launch.json` specifies port 9050 (the default)
+for the test server and the location of the configuration file: 
 ```
 {
     "version": "0.2.0",
@@ -625,15 +624,17 @@ debugging, server port and HTTPS mode [TODO - https is not working at the moment
             "console": "integratedTerminal",
             "justMyCode": true,
             "env": {
-                "USAGE_PORT": "9050"
+                "USAGE_PORT": "9050",
+                "USAGE_JSON": "C:/users/xxxx/yyy/usage.json"
             }
         }
     ]
 }
 ```
-- In the `usage.json` configuration file, modify `influx_url` to point at your influx
-server (probably the same machine as your Powerwall-Dashboard) and set the correct 
-`timezone`.
+- For initial testing, create a copy of the `example_usage.json` file, set the 
+`USAGE_JSON` environment variable to point at this file and modify the contents of the
+file  so that `influx_url` points at your influx server (probably the same machine as
+your Powerwall-Dashboard) and your `timezone` is correct.
 - At this point, you should be able to run `server.py` from the @Buongiorno repo - for 
 me, `py proxy\server.py` works. You should then check that the usage engine is 
 responding by pointing a web browser at `http://server.address:<port>/usage_engine`. 
@@ -645,3 +646,6 @@ Usage Engine Status	"Engine OK, tariffs (re)loaded"
 If you don't see this, please check that you are using the unmodified `usage.json`. If 
 you still have problems, let us know on the dev issue thread to see if we can trouble 
 shoot.
+
+If you do get the expected response, you can now modify the `usage.json` file to
+reflect your own tariff structure.

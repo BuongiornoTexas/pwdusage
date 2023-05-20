@@ -6,7 +6,7 @@
  For more information see https://github.com/jasonacox/pypowerwall
 
 """
-# cspell: ignore CONFIGFILE pydantic simples astype simplejson
+# cspell: ignore pydantic simples astype simplejson
 
 # I've gone back and forth on treating this as a module with globals or a class.
 # I've ended up going class as there is enough going on that it will just
@@ -19,9 +19,9 @@ import simplejson  # type: ignore
 
 from itertools import pairwise
 from threading import Lock
-from typing import Union, Any, Optional, Type
+from typing import Any, Optional, Type
 from zoneinfo import ZoneInfo
-from datetime import datetime, timezone, timedelta, time
+from datetime import datetime, timezone, time
 from pandas import DataFrame, Series, notnull  # type:ignore
 from numpy import int64 as np_int64
 from dataclasses import dataclass, InitVar
@@ -33,7 +33,7 @@ from influxdb_client import InfluxDBClient, QueryApi  # type: ignore
 from common import PDColName
 from base_agent import UsageAgent
 
-CONFIGFILE = "usage.json"
+DEFAULT_CONFIG = "./usage.json"
 SUPPLY_PRIORITY = "supplyPriority"
 
 # InfluxDB _time will become our index.
@@ -405,7 +405,7 @@ class UsageEngine:
             self.reload_config()
 
     @classmethod
-    def _init_settings(cls, config: dict[str, Any]) -> None:
+    def _init_settings(cls, config: dict[str, Any], json_file:str) -> None:
         # process settings
         settings = config["settings"]
         cls._influx_client = InfluxDBClient(settings["influx_url"])
@@ -433,7 +433,7 @@ class UsageEngine:
         if cls._bucket not in bucket_list:
             temp = cls._bucket
             cls._bucket = ""
-            raise KeyError(f"Invalid data bucket name '{temp}' in '{CONFIGFILE}'")
+            raise KeyError(f"Invalid data bucket name '{temp}' in '{json_file}'")
 
         # For now, set demand priority as a global, but this could move to per plan
         # if anyone needs to change their allocation with plan (I don't see any case
@@ -535,11 +535,19 @@ class UsageEngine:
     def reload_config(cls) -> None:
         with cls._lock:
             # Thread safe config update.
-            with open(CONFIGFILE, "r") as fp:
-                config = simplejson.load(fp)
+            json_file = getenv("USAGE_JSON", DEFAULT_CONFIG)
+            try:
+                with open(json_file, "r") as fp:
+                    config = simplejson.load(fp)
+            except FileNotFoundError:
+                raise FileNotFoundError(
+                    "Usage engine JSON configuration file not found."
+                    "\nSpecify 'USAGE_JSON' environment variable or provide "
+                    "'usage.json' file in working directory."
+                )
 
             # Broken into multiple sections if this gets too long.
-            cls._init_settings(config)
+            cls._init_settings(config, json_file)
 
             if "plans" not in config:
                 raise KeyError("No usage plan data in config file.")
@@ -841,7 +849,7 @@ class UsageEngine:
                 )
 
     def usage(self, request_content: dict[str, Any]) -> str:
-        # Create report columns list. 
+        # Create report columns list.
         self._report_cols = {}
 
         # Get time range for usage. Should be iso format, UTC.
@@ -907,6 +915,7 @@ class UsageEngine:
 
         # NOTE - MUST USE SIMPLEJSON FOR THIS. Avoids choking on Nan in grafana plugin.
         return simplejson.dumps(tables, ignore_nan=True)
+
 
 if __name__ == "__main__":
     # Quick and dirty engine tester.
