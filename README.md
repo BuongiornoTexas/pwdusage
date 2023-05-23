@@ -6,36 +6,6 @@
 
 Usage (mainly time of use) proxy microservice for Powerwall-Dashboard
 
-# Development notes for usage engine
-
-Everything in this document is a temporary placeholder for development of the usage 
-engine. Contents will be incorporated into the server README or deleted in future.
-
-# Fixes required for final release
-
-This is a TODO list for @BuongiornoTexas. Everyone else please ignore (unless you want 
-to help with development ...). Sorry for putting
-it here, but I need to keep this top of mind for implementation.
-
-- Fix `server.py` do_GET error response - right now do_GET always returns 200 even on
-invalid page. So Json Data source will always return working even if it is not! 
-I think this may also be eating some configuration error messages?
-- Implement resampling/aggregation so that bar charts > 24h are meaningful. Should be 
-quick (expect update in next few days).
-- Detail `USAGE_JSON` environment variable for docker build - specifically, what needs
-to be set up so docker sees the file in the local file system. And, you know, test 
-that it actually works.
-- Address other changes needed to get code docker compatible.
-- Maybes/future functions?:
-  - Implement mechanism to dump data frame to file for debugging?
-  - Add query payload to allow user to limit return to either cost or energy data only?
-  - Add query payload to allow user to request summary data (totals) only?
-  - Add query payload to allow user to request raw data without aggregation?
-- Decide/fix best approach for https server. Don't want to be carrying duplicate code
-base if possible? Is the only thing needed a certificate `.pem` file?
-
-# Usage Engine for pypowerwall server
-
 The following dot points outline key elements of the usage engine:
 
 - The usage engine provides a framework for time of use energy and cost reporting.
@@ -76,12 +46,10 @@ the historical data may not reflect optimisation for the tariff).
 
 # Setup
 
-TODO: Assuming there is user support and enthusiasm for the usage engine, it should be
-integrated into the main pypowerwall codebase. Until that time, users will either need 
-to prepare a custom docker image, or follow the 
+TODO: Set up docker container for microservice. Until this is done time, users will
+either need to prepare a custom docker image, or follow the 
 ["Installation for test users"](#installation-for-developmenttesting) instructions below
 to setup a stand alone pypowerwall server instance for running the usage engine.
-
 
 # Configuration
 
@@ -561,7 +529,8 @@ an agent for your use case).
 TODO add images to this section.
 
 If you are using a test usage server, start it now. For a first time run, I'd suggest
-using the default `usage.json`. 
+using the example `usage.json` with edits to reflect your influx hostname and 
+local timezone. 
 
 From the general grafana configuration (bottom left):
 
@@ -573,7 +542,24 @@ is 8675, but if you may have changed this if you are running a test server (you
 DEFINITELY should have changed this if you are running a test server on the same 
 host as your main pypowerwall docker instance).
 - Hit "Save and Test". You should see two green tick messages "Datasource updated" and 
-"Data source is working".
+"Data source is working". 
+
+##### Datasource troubleshooting
+
+If the usage engine service has not started properly, the second message will show a 
+green "Testing ..." for a while, followed by a red/pink "Gateway Timeout".
+
+If the datasource url is incorrect, the second message will read: "Not Found". 
+
+If the server has started and the url is correct, but there is problem with the usage
+engine configuration, the second message will read: "status code 599". In this case,
+try:
+
+- Using a web browser to open `http://<hostname>:<port>/usage_engine`. The page may 
+give some hints.
+- Check the server log (if you are running docker, check the docker log).
+- If none of this helps, raise an issue at: 
+  `https://github.com/BuongiornoTexas/PW-Dashboard-usage-proxy/issues`.
 
 ### Dashboard setup
 

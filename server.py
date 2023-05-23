@@ -24,52 +24,19 @@ import ssl
 from engine import UsageEngine
 
 BUILD = "v0.9"
+HTTP_GET_ERROR = "GET Error."
+HTTP_PUT_ERROR = "PUT Error."
+HTTPS = "HTTPS"
+HTTP = "HTTP"
 
-# Configuration for Proxy - Check for environmental variables
-#    and always use those if available (required for Docker)
-bind_address = os.getenv("USAGE_BIND_ADDRESS", "")
-debug_mode = os.getenv("USAGE_DEBUG", "no")
-https_mode = os.getenv("USAGE_HTTPS", "no")
-port = int(os.getenv("USAGE_PORT", "9050"))
-
-if https_mode == "yes":
-    # run https mode with self-signed cert
-    cookie_suffix = "path=/;SameSite=None;Secure;"
-    http_type = "HTTPS"
-elif https_mode == "http":
-    # run http mode but simulate https for proxy behind https proxy
-    cookie_suffix = "path=/;SameSite=None;Secure;"
-    http_type = "HTTP"
-else:
-    # run in http mode
-    cookie_suffix = "path=/;"
-    http_type = "HTTP"
-
-# Logging
+# Global logger
+logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
 log = logging.getLogger("proxy")
-logging.basicConfig(format="%(levelname)s:%(message)s", level=logging.INFO)
-log.setLevel(logging.INFO)
-
-if debug_mode == "yes":
-    log.info(
-        "Powerwall-Dashboard usage proxy Server [%s] - %s Port %d - DEBUG"
-        % (BUILD, http_type, port)
-    )
-    log.setLevel(logging.DEBUG)
-else:
-    log.info(
-        "Powerwall-Dashboard usage proxy Server [%s] - %s Port %d"
-        % (BUILD, http_type, port)
-    )
-log.info("Powerwall-Dashboard usage engine proxy Started")
 
 
 class handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: tuple[Any]) -> None:
-        if debug_mode == "yes":
-            log.debug("%s %s" % (self.address_string(), format % args))
-        else:
-            pass
+        log.debug("%s %s" % (self.address_string(), format % args))
 
     def address_string(self) -> str:
         # replace function to avoid lookup delays
@@ -77,37 +44,44 @@ class handler(BaseHTTPRequestHandler):
         return host
 
     def do_GET(self) -> None:
-        self.send_response(200)
-        message = "ERROR!"
         contenttype = "application/json"
+        message = simplejson.dumps(HTTP_GET_ERROR)
 
         if self.path == "/usage_engine":
-            # Response of 200 used by grafana to validate
-            # usage engine is working. Dummy message to check on
-            # web page.
             try:
                 # As a side effect of this, (re)-load usage engine configuration.
                 UsageEngine.reload_config()
+                # Response of 200 used by grafana to validate usage engine is working.
+                # Also provide message to check on web page.
+                self.send_response(200)
                 message = simplejson.dumps(
                     {"Usage Engine Status": "Engine OK, tariffs (re)loaded"}
                 )
             except Exception as err:
-                # trap all errors so that we don't crash the server.
-                log.error("Error loading tariffs [doGET].")
+                # Trap errors and provide some debugging information.
+                self.send_response(
+                    599, "Error loading usage engine configuration file."
+                )
+                log.error("Error loading usage engine configuration file.")
                 log.error(f"Details: {err}")
                 message = simplejson.dumps(
-                    {"Usage Engine Status": f"Error loading tariffs ({err})."}
+                    {
+                        "Usage Engine Status": f"599 Error loading usage engine configuration file ({err})."
+                    }
                 )
 
         else:
-            # Everything else - do nothing
-            pass
-
-        # Count
-        if message is None:
-            message = "TIMEOUT!"
-        elif message == "ERROR!":
-            message = "ERROR!"
+            # Everything else - return a 404.
+            self.send_response(404)
+            # This is a hack, as I'm not going to learn how to pass an HTML formatted
+            # message.
+            message = simplejson.dumps(
+                [
+                    "Invalid page request. ",
+                    "Usage engine API URL must be <host address>:port/usage_engine.",
+                    f"Got {self.path}.",
+                ]
+            )
 
         # Send headers and payload
         try:
@@ -122,32 +96,34 @@ class handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         # do_POST usage engine elements should be duplicated
         # in the test server.
-        d_len = int(self.headers.get("content-length")) # type: ignore[arg-type]
+        d_len = int(self.headers.get("content-length"))  # type: ignore[arg-type]
         request_content = simplejson.loads(self.rfile.read(d_len).decode("utf-8"))
 
-        self.send_response(200)
-        message = "ERROR!"
+        # PUT code will fail silently. User will need to debug via logs or use curl
+        # for more detail.
+        message = simplejson.dumps(HTTP_PUT_ERROR)
         contenttype = "application/json"
 
         if self.path == "/usage_engine/metrics":
+            self.send_response(200)
             message = UsageEngine.metrics()
 
         elif self.path == "/usage_engine/query":
             try:
                 # finally, we actually instantiate a usage engine to return content.
                 message = UsageEngine().usage(request_content)
+                self.send_response(200)                
             except Exception as err:
                 # trap all errors so that we don't crash the server.
                 log.error("Error getting usage [do_POST].")
                 log.error(f"Details: {err}")
+                self.send_response(599, f"Usage engine - metric query error.")
                 message = simplejson.dumps(
                     {"Usage Engine Status": f"Error getting usage ({err})."}
                 )
-
-        if message is None:
-            message = "do_POST TIMEOUT!"
-        elif message == "ERROR!":
-            message = "do_POST Unknown ERROR!"
+        else:
+            self.send_response(599)
+            message = simplejson.dumps(f"Usage engine - unknown url '{self.path}'.")
 
         # Send headers and payload
         try:
@@ -160,23 +136,47 @@ class handler(BaseHTTPRequestHandler):
             log.error("Socket broken sending response [doPOST]")
 
 
-with ThreadingHTTPServer((bind_address, port), handler) as server:
-    if https_mode == "yes":
-        # Activate HTTPS
-        log.debug("Activating HTTPS")
-        server.socket = ssl.wrap_socket(
-            server.socket,
-            certfile=os.path.join(os.path.dirname(__file__), "localhost.pem"),
-            server_side=True,
-            ssl_version=ssl.PROTOCOL_TLSv1_2,
-            ca_certs=None,
-            do_handshake_on_connect=True,
-        )
+if __name__ == "__main__":
+    # Configuration for usage proxy - Check for environmental variables
+    # and always use those if available (required for Docker)
+    port = int(os.getenv("USAGE_PORT", "9050"))
 
-    try:
-        server.serve_forever()
-    except:
-        print(" CANCEL \n")
+    match os.getenv("USAGE_HTTPS", "no"): 
+        case "yes", "https", "HTTPS":
+            # run https mode with self-signed cert
+            http_type = HTTPS
+        case _:
+            http_type = HTTP
 
-    log.info("Powerwall-Dashboard usage proxy Stopped")
-    os._exit(0)
+    log.info(
+        "Powerwall-Dashboard usage proxy server [%s] - %s Port %d"
+        % (BUILD, http_type, port)
+    )
+
+    if os.getenv("USAGE_DEBUG", "no") == "yes":
+        log.setLevel(logging.DEBUG)
+        log.debug("Debugging active.")
+
+    with ThreadingHTTPServer(
+        (os.getenv("USAGE_BIND_ADDRESS", ""), port), handler
+    ) as server:
+        if http_type == HTTPS:
+            # Activate HTTPS
+            log.debug("Activating HTTPS")
+            server.socket = ssl.wrap_socket(
+                server.socket,
+                certfile=os.path.join(os.path.dirname(__file__), "localhost.pem"),
+                server_side=True,
+                ssl_version=ssl.PROTOCOL_TLSv1_2,
+                ca_certs=None,
+                do_handshake_on_connect=True,
+            )
+
+        log.info("Powerwall-Dashboard usage engine proxy Started")
+        try:
+            server.serve_forever()
+        except:
+            print(" CANCEL \n")
+
+        log.info("Powerwall-Dashboard usage proxy Stopped")
+        os._exit(0)
