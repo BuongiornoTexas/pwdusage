@@ -537,10 +537,8 @@ From the general grafana configuration (bottom left):
 - Select `Data sources`.
 - Click `Add data source` and add a JSON data source.
 - Give it a name - the example dash board uses `JSON Usage`. 
-- Set the URL to: `http://<hostname>:<port>/usage_engine`. The default pypowerwall port
-is 8675, but if you may have changed this if you are running a test server (you 
-DEFINITELY should have changed this if you are running a test server on the same 
-host as your main pypowerwall docker instance).
+- Set the URL to: `http://<hostname>:<port>/usage_engine`. The default usage engine port
+is 9050, but you can override this via the `USAGE_PORT` environment variable.
 - Hit "Save and Test". You should see two green tick messages "Datasource updated" and 
 "Data source is working". 
 
