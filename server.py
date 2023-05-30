@@ -6,7 +6,7 @@
 
  Author: Buongiorno Texas
  For more information see https://github.com/jasonacox/Powerwall-Dashboard and
- https://github.com/BuongiornoTexas/Powerwall-Dashboard-usage-proxy.
+ https://github.com/BuongiornoTexas/PW-Dashboard-usage-proxy.
 
  Usage Engine Proxy Server
     This server will pull energy use data from the Powerwall-Dashboard Influx Database
@@ -17,22 +17,17 @@ from typing import Any
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
 import simplejson  # type: ignore
-import logging
-
 import ssl
 
+from common import log
 from engine import UsageEngine
+from logging import DEBUG as LOG_DEBUG
 
-BUILD = "v0.9"
+BUILD = "v0.9.1"
 HTTP_GET_ERROR = "GET Error."
 HTTP_PUT_ERROR = "PUT Error."
 HTTPS = "HTTPS"
 HTTP = "HTTP"
-
-# Global logger
-logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
-log = logging.getLogger("proxy")
-
 
 class handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: tuple[Any]) -> None:
@@ -110,9 +105,19 @@ class handler(BaseHTTPRequestHandler):
 
         elif self.path == "/usage_engine/query":
             try:
+                payload = request_content["targets"][0]["payload"]
+            except KeyError:
+                payload = None
+
+            try:
                 # finally, we actually instantiate a usage engine to return content.
-                message = UsageEngine().usage(request_content)
-                self.send_response(200)                
+                message = UsageEngine().usage(
+                    start_utc=request_content["range"]["from"],
+                    stop_utc=request_content["range"]["to"],
+                    payload=payload,
+                    request_content=request_content,
+                )
+                self.send_response(200)
             except Exception as err:
                 # trap all errors so that we don't crash the server.
                 log.error("Error getting usage [do_POST].")
@@ -141,7 +146,7 @@ if __name__ == "__main__":
     # and always use those if available (required for Docker)
     port = int(os.getenv("USAGE_PORT", "9050"))
 
-    match os.getenv("USAGE_HTTPS", "no"): 
+    match os.getenv("USAGE_HTTPS", "no"):
         case "yes", "https", "HTTPS":
             # run https mode with self-signed cert
             http_type = HTTPS
@@ -154,7 +159,7 @@ if __name__ == "__main__":
     )
 
     if os.getenv("USAGE_DEBUG", "no") == "yes":
-        log.setLevel(logging.DEBUG)
+        log.setLevel(LOG_DEBUG)
         log.debug("Debugging active.")
 
     with ThreadingHTTPServer(

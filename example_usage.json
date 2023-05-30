@@ -3,7 +3,7 @@
         "influx_url": "http://localhost:8086",
         "bucket": "powerwall/kwh",
         "timezone": "Australia/Hobart",
-        "supplyPriority": [
+        "supply_priority": [
             "GRID_SUPPLY",
             "PW_SUPPLY",
             "SOLAR_SUPPLY"
@@ -13,7 +13,10 @@
         "rename": {
             "GRID_SUPPLY": "Grid supply---",
             "GRID_EXPORT": "Grid export+++"
-        }
+        },
+        "resample": true,
+        "week_anchor": "MONTH",
+        "year_anchor": "JUN"        
     },
     "plans": [
         {

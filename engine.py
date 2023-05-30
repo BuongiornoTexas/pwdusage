@@ -6,7 +6,8 @@
  For more information see https://github.com/jasonacox/pypowerwall
 
 """
-# cspell: ignore pydantic simples astype simplejson
+# cspell: ignore pydantic simples astype simplejson rollforward pydatetime
+# cspell: ignore dayofweek
 
 # I've gone back and forth on treating this as a module with globals or a class.
 # I've ended up going class as there is enough going on that it will just
@@ -17,24 +18,59 @@
 # import datetime
 import simplejson  # type: ignore
 
+from argparse import ArgumentParser
+
 from itertools import pairwise
 from threading import Lock
-from typing import Any, Optional, Type
+from typing import Any, Optional, Type, Union
 from zoneinfo import ZoneInfo
 from datetime import datetime, timezone, time
-from pandas import DataFrame, Series, notnull  # type:ignore
+from pandas import (  # type:ignore
+    DataFrame,
+    Series,
+    notnull,
+    offsets,
+    Timestamp,
+    DatetimeIndex,
+    Timedelta,
+)
 from numpy import int64 as np_int64
 from dataclasses import dataclass, InitVar
 from dataclasses import replace as dc_replace
 from os import getenv
+from logging import DEBUG as LOG_DEBUG
 
 from influxdb_client import InfluxDBClient, QueryApi  # type: ignore
 
-from common import PDColName
+from common import PDColName, log
 from base_agent import UsageAgent
 
 DEFAULT_CONFIG = "./usage.json"
-SUPPLY_PRIORITY = "supplyPriority"
+SUPPLY_PRIORITY = "supply_priority"
+WEEK_ANCHORS = {
+    "MONTH": -1,
+    "MON": 0,
+    "TUE": 1,
+    "WED": 2,
+    "THU": 3,
+    "FRI": 4,
+    "SAT": 5,
+    "SUN": 6,
+}
+YEAR_ANCHORS = {
+    "JAN": 1,
+    "FEB": 2,
+    "MAR": 3,
+    "APR": 4,
+    "MAY": 5,
+    "JUN": 6,
+    "JUL": 7,
+    "AUG": 8,
+    "SEP": 9,
+    "OCT": 10,
+    "NOV": 11,
+    "DEC": 12,
+}
 
 # InfluxDB _time will become our index.
 INFLUX_TIME = "_time"
@@ -60,15 +96,21 @@ INFLUX_TO_PANDAS = {
 }
 
 
-def safe_iso_utc_to_dt(iso_utc: str, new_tz: Optional[ZoneInfo] = None) -> datetime:
+def safe_iso_utc_to_dt(
+    iso_utc: Union[str, datetime], new_tz: Optional[ZoneInfo] = None
+) -> datetime:
+    # iso_utc should either be the UTC string format with trailing Z, or utc datetime.
     # As python doesn't deal with trailing Z until 3.11, handle it manually to
     # allow for older installations. Returns UTC time unless provide with a
     # timezone.
-    if iso_utc[-1] != "Z":
-        raise ValueError(f"Expected isoformat utc time ending Z. Got {iso_utc}")
-
-    dt = datetime.fromisoformat(iso_utc[:-1])
-    dt = dt.replace(tzinfo=timezone.utc)
+    if isinstance(iso_utc, str):
+        if iso_utc[-1] != "Z":
+            raise ValueError(f"Expected isoformat utc time ending Z. Got {iso_utc}")
+        # Create safe utc time.
+        dt = datetime.fromisoformat(iso_utc[:-1])
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = iso_utc
 
     if new_tz is not None:
         dt = dt.astimezone(new_tz)
@@ -397,15 +439,50 @@ class UsageEngine:
     # versions. As no one will be happy with my versions. (Which is fine.)
     # Key is the PDColName to override, str is the new string value for the override.
     _col_overrides: dict[PDColName, str]
+    # http request dictionary if any (I strongly suspect we will never use this).
+    _request_content: Optional[dict[str, Any]] = None
 
-    def __init__(self) -> None:
+    # Grafana payload parameters
+    # Default behaviour is to enable resampling to sensible intervals.
+    resample: bool = True
+    summary_report: bool = False
+    report_month_to_date: bool = False
+    report_year_to_date: bool = False
+    _week_anchor: str = "MONTH"
+    _year_anchor: str = "JAN"
+
+    @staticmethod
+    def _validate_anchor(anchor: str, options: dict[str, int]) -> str:
+        u_value = anchor.upper()
+        if u_value in options.keys():
+            return u_value
+        else:
+            raise ValueError(f"Invalid anchor '{anchor}'")
+
+    @property
+    def week_anchor(self) -> str:
+        return self._week_anchor
+
+    @week_anchor.setter
+    def week_anchor(self, value: str) -> None:
+        self._week_anchor = self._validate_anchor(value, WEEK_ANCHORS)
+
+    @property
+    def year_anchor(self) -> str:
+        return self._year_anchor
+
+    @year_anchor.setter
+    def year_anchor(self, value: str) -> None:
+        self._year_anchor = self._validate_anchor(value, YEAR_ANCHORS)
+
+    def __init__(self, json_path: Optional[str] = None) -> None:
         # Load configuration if required. For now, make the basis a check on
         # _influx_client
         if self._influx_client is None:
-            self.reload_config()
+            self.reload_config(json_path=json_path)
 
     @classmethod
-    def _init_settings(cls, config: dict[str, Any], json_file:str) -> None:
+    def _init_settings(cls, config: dict[str, Any], json_file: str) -> None:
         # process settings
         settings = config["settings"]
         cls._influx_client = InfluxDBClient(settings["influx_url"])
@@ -473,6 +550,19 @@ class UsageEngine:
         if "energy_unit" in settings:
             cls._energy_unit = settings["energy_unit"]
 
+        if "resample" in settings:
+            cls.resample = bool(settings["resample"])
+
+        if "week_anchor" in settings:
+            cls._week_anchor = UsageEngine._validate_anchor(
+                settings["week_anchor"], WEEK_ANCHORS
+            )
+
+        if "year_anchor" in settings:
+            cls._year_anchor = UsageEngine._validate_anchor(
+                settings["year_anchor"], YEAR_ANCHORS
+            )
+
     @classmethod
     def _load_calendar(cls, calendar_json: dict[str, Any]) -> None:
         prev_event: CalendarEntry
@@ -532,22 +622,27 @@ class UsageEngine:
             this.end_date = next.start_date
 
     @classmethod
-    def reload_config(cls) -> None:
+    def reload_config(cls, json_path: Optional[str] = None) -> None:
+        # path to json file muse be specified in interactive mode.
         with cls._lock:
             # Thread safe config update.
-            json_file = getenv("USAGE_JSON", DEFAULT_CONFIG)
+            if json_path is None:
+                # JSON file pulled from environment variable in server mode.
+                json_path = getenv("USAGE_JSON", DEFAULT_CONFIG)
+
             try:
-                with open(json_file, "r") as fp:
+                with open(json_path, "r") as fp:
                     config = simplejson.load(fp)
             except FileNotFoundError:
                 raise FileNotFoundError(
                     "Usage engine JSON configuration file not found."
-                    "\nSpecify 'USAGE_JSON' environment variable or provide "
-                    "'usage.json' file in working directory."
+                    "\nSpecify 'USAGE_JSON' environment variable, provide "
+                    "'usage.json' file in working directory, or provide valid path for "
+                    "CLI version."
                 )
 
             # Broken into multiple sections if this gets too long.
-            cls._init_settings(config, json_file)
+            cls._init_settings(config, json_path)
 
             if "plans" not in config:
                 raise KeyError("No usage plan data in config file.")
@@ -848,18 +943,146 @@ class UsageEngine:
                     kwargs=kwargs,
                 )
 
-    def usage(self, request_content: dict[str, Any]) -> str:
+    def _set_report_range(
+        self, start_utc: Union[str, datetime], stop_utc: Union[str, datetime]
+    ) -> None:
+        # Utility to set up datetime range for reporting.
+        # datetime must be UTC, isoformat string or datetime.
+        # As we explicitly convert to a datetime, we also auto-sanitise this input.
+
+        start: Timestamp
+        end: Timestamp
+
+        if self.report_month_to_date or self.report_year_to_date:
+            now = Timestamp.now(tz=self._timezone).normalize()
+            # pandas makes the next bits very easy!
+            if self.report_year_to_date:
+                anchor = YEAR_ANCHORS[self._year_anchor]
+                start = offsets.YearBegin(month=anchor).rollback(now)
+                # Could do this with modulo, but hard to read.
+                if anchor == 1:
+                    anchor = 12
+                else:
+                    anchor = anchor - 1
+                end = offsets.YearEnd(month=anchor).rollforward(now)
+
+            else:
+                start = offsets.MonthBegin().rollback(now)
+                end = offsets.MonthEnd().rollforward(now)
+
+            # Clean up
+            end = end + offsets.Hour(23) + offsets.Minute(59) + offsets.Second(59)
+            self._range_start = start.to_pydatetime()
+            self._range_stop = end.to_pydatetime()
+
+        else:
+            # Use specified ranges.
+            self._range_start = safe_iso_utc_to_dt(start_utc, new_tz=self._timezone)
+            self._range_stop = safe_iso_utc_to_dt(stop_utc, new_tz=self._timezone)
+
+        log.debug(
+            f"Usage query range from '{self._range_start}' to '{self._range_stop}'."
+        )
+
+    def _aggregate(self) -> None:
+        # Perform data aggregation as required.
+
+        if self.summary_report:
+            # Over rides everything else. Sum returns a series, so we convert it back
+            # to a frame and transpose it - because the json export expects a frame
+            # and this eliminates the need for special case code.
+            self._frame = self._frame.sum(numeric_only=True).to_frame().T
+            # And because the index is [0], replace it with an appropriate datetime
+            self._frame.index = DatetimeIndex([self._range_start])
+
+        elif self.resample:
+            start = Timestamp(self._range_start)
+            stop = Timestamp(self._range_stop)
+            if start.date() == stop.date():
+                # Both on the same, resample to hours.
+                self._frame = self._frame.resample(
+                    "H", closed="left", label="left"
+                ).sum(numeric_only=True)
+
+            elif (stop - start) <= Timedelta(days=7):
+                # Both in roughly the same week, resample to days. Will result in
+                # up to 8 days shown depending on how the query is structured.
+                # grafana now-7d will definitely cause this!
+                # Good enough is close enough.
+                self._frame = self._frame.resample(
+                    "D", closed="left", label="left"
+                ).sum(numeric_only=True)
+
+            elif start.year == stop.year and start.month == stop.month:
+                # to_period is the elegant of doing this check, but pandas raises a 
+                # UserWarning about losing tz info that we don't want to suppress.
+                # So we go with a more heavy handed check.
+                if self.week_anchor == "MONTH":
+                    # anchor on first day of month
+                    anchor = offsets.MonthBegin().rollback(start).dayofweek
+                else:
+                    anchor = WEEK_ANCHORS[self.week_anchor]
+                self._frame = self._frame.resample(
+                    offsets.Week(weekday=anchor), closed="left", label="left"
+                ).sum(numeric_only=True)
+
+            elif (stop.year - start.year) * 12 + stop.month - start.month <= 11:
+                # Anything less than a year, sample on monthly basis. 
+                # I think the above test captures this, but ... I may have missed an
+                # edge case.
+                self._frame = self._frame.resample(
+                    "MS", closed="left", label="left"
+                ).sum(numeric_only=True)
+
+            else:
+                # Resample on yearly basis, honour anchor.
+                self._frame = self._frame.resample(
+                    "AS-" + self.year_anchor, closed="left", label="left"
+                ).sum(numeric_only=True)
+
+        else:
+            # if we are not resampling, do nothing to the frame.
+            pass
+
+    def usage(
+        self,
+        start_utc: Union[str, datetime],
+        stop_utc: Union[str, datetime],
+        payload: Optional[dict[str, Any]] = None,
+        request_content: Optional[dict[str, Any]] = None,
+    ) -> str:
+        # Arguments:
+        #  start_utc - start_time, iso format string UTC time ending in Z, or utc
+        #    datetime.
+        #  stop_utc - start_time, iso format string UTC time ending in Z, or utc
+        #   datetime.
+        #  payload - payload dictionary, which may contain the following entries:
+        #    "resample": True | False, also accessible via self.resample class attribute
+        #    "month_to_date": True | False, accessible by self.report_month_to_date
+        #    "year_to_date": True | False, accessible by self.report_year_to_date
+        #    "summary": True | False, accessible by self.summary_report
+        #  request_content - json http request dictionary. Not used in V1.0, but
+        #    provided for potential future use.
+
+        if request_content is not None:
+            # store it if we have it.
+            self._request_content = request_content
+
+        if payload is not None:
+            if "resample" in payload:
+                self.resample = bool(payload["resample"])
+            if "month_to_date" in payload:
+                self.report_month_to_date = bool(payload["month_to_date"])
+            if "year_to_date" in payload:
+                self.report_year_to_date = bool(payload["year_to_date"])
+            if "summary" in payload:
+                self.summary_report = bool(payload["summary"])
+
         # Create report columns list.
         self._report_cols = {}
 
-        # Get time range for usage. Should be iso format, UTC.
-        # As we explicitly convert to a datetime, we also auto-sanitise this input.
-        self._range_start = safe_iso_utc_to_dt(
-            request_content["range"]["from"], new_tz=self._timezone
-        )
-        self._range_stop = safe_iso_utc_to_dt(
-            request_content["range"]["to"], new_tz=self._timezone
-        )
+        # Set up query time range.
+        self._set_report_range(start_utc=start_utc, stop_utc=stop_utc)
 
         # Pull the raw data
         self._get_influx_data()
@@ -869,6 +1092,8 @@ class UsageEngine:
         # Break the data into seasons and schedules, tag tariffs and add
         # cost data.
         self._process_periodic_data()
+
+        self._aggregate()
 
         # And now we process the frame into json tables
         return self._frame_to_json_tables()
@@ -885,10 +1110,6 @@ class UsageEngine:
         # add time to our report dict
         df.insert(0, PDColName.TIME.value, df.index.astype(np_int64) / int(1e6))
         self._report_cols[PDColName.TIME.value] = "time"
-
-        # Second to last step - resample the frame to generate a sensible number of
-        # data points. TODO!
-        # def do this here.
 
         # Next bit cribs heavily from
         # https://github.com/panodata/grafana-pandas-datasourced
@@ -918,5 +1139,63 @@ class UsageEngine:
 
 
 if __name__ == "__main__":
-    # Quick and dirty engine tester.
-    pass
+    """Provide command for debugging dumps."""
+    parser = ArgumentParser(
+        description="Simple debug interface to Powerwall Dashboard usage engine."
+        "\nstart and end are required, month to date, year to date not supported."
+    )
+    """parser.add_argument(
+        "--start",
+        # cspell: disable-next-line
+        help="Start date/time for reporting. Local time, no tz info - YYYY-MM-DDTHH:MM.", 
+        required=True
+    )
+    
+    parser.add_argument(
+        "--end",
+        # cspell: disable-next-line
+        help="Start date/time for reporting. Local time, no tz info - YYYY-MM-DDTHH:MM.",
+        required=True
+    )"""
+
+    parser.add_argument(
+        "--config",
+        # cspell: disable-next-line
+        help="Path to json config file.",
+        required=True,
+    )
+
+    parser.add_argument("--summary", help="Summary report only.", action="store_true")
+
+    parser.add_argument(
+        "--disable-resample", help="Summary report only.", action="store_true"
+    )
+
+    parser.add_argument("--debug", help="Provide debug logging.", action="store_true")
+
+    args = parser.parse_args()
+
+    # Create our usage instance.
+    usage = UsageEngine(json_path=args.config)
+    usage.resample = not args.disable_resample
+    usage.summary_report = args.summary
+
+    # Sort out the dates we want.
+    # This is very clunky. Convert string to time, add local timezone, convert to utc.
+    # usage will then revert back to local time zone ...
+    # Includes lazy reach into usage instance for tz info.
+    start = (
+        datetime.fromisoformat(args.start)
+        .replace(tzinfo=usage._timezone)
+        .astimezone(tz=timezone.utc)
+    )
+    stop = (
+        datetime.fromisoformat(args.stop)
+        .replace(tzinfo=usage._timezone)
+        .astimezone(tz=timezone.utc)
+    )
+
+    if args.debug:
+        log.setLevel(LOG_DEBUG)
+
+    usage.usage(start_utc=start, stop_utc=stop, payload=None, request_content=None)

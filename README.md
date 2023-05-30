@@ -2,6 +2,28 @@
 # cspell: ignore venv beautifulsoup tzdata numpy simplejson datasource
 ---> 
 
+# Change Log
+
+I'm tracking progress towards v1.0 at: 
+https://github.com/BuongiornoTexas/PW-Dashboard-usage-proxy/issues/1
+
+
+## Breaking
+
+This section notes any breaking changes, from newest to oldest.
+
+- **v0.9.1**. "supplyPriority" in `usage.json` renamed to "supply_priority" to improve
+naming consistency.
+
+## New Features
+
+**v0.9.1**
+- Resampling to more useful periods for bar charts.
+- Payload features implemented. You can now turn resampling on/off, request summary 
+reports, and select year to date or month to date reporting (which ignore the grafana
+range).
+- Month anchor for annual reporting, weekday anchor for monthly reporting by week.
+
 # Powerwall-Dashboard-usage-proxy
 
 Usage (mainly time of use) proxy microservice for Powerwall-Dashboard
@@ -147,7 +169,7 @@ The structure of the settings dictionary is:
         "influx_url": "http://<hostname>:8086",
         "bucket": "powerwall/kwh",
         "timezone": "Australia/Hobart",
-        "supplyPriority": [
+        "supply_priority": [
             "GRID_SUPPLY",
             "PW_SUPPLY",
             "SOLAR_SUPPLY"
@@ -157,7 +179,10 @@ The structure of the settings dictionary is:
         "rename": {
             "GRID_SUPPLY": "Grid supply---",
             "GRID_EXPORT": "Grid export+++"
-        }
+        },
+        "resample": true,
+        "week_anchor": "MONTH",
+        "year_anchor": "JAN"
     },
 ```
 
@@ -173,12 +198,26 @@ for usage cost and energy data. Default to "$" and "kWh".
 - `rename` - An **optional** dictionary that allows replacement of the default strings 
 defined in `common.py`. If you want to have a new label string for the `"SOLAR_SUPPLY"`,
 you can go nuts. Be my guest. The boring example above adds multiple - and + signs to
-the strings for grid supply and grid export. 
+the strings for grid supply and grid export.
+- `resample` - An **optional** setting which specifies if data should be downsampled,
+with a default of true (true or false). This can also be set by a grafana payload. See
+[JSON Payload](#json-payload) for discussion on resampling implementation and how to
+configure the payload.
+- `week_anchor` - An **optional** setting with default value of "MONTH". This specifies
+the first day of the week used in data resampling. The default is to anchor the week
+start to the first day of the month, but you can lock it to a fixed day of the week
+using one of: ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]. 
+- `year_anchor` - An **optional** setting with default value of "JAN". This specifies
+the first month of the year for annual reporting (provided in case anyone wants to run
+reports that line up with local financial years). You can modify using any three day
+month abbreviation ["JAN", "FEB", "MAR", ... , "DEC"]. Note: the first day of the 
+reporting year corresponds to the first day of the specified month - e.g. 1st July for 
+"JUL".
 
-Finally, `"supplyPriority"` is an **optional** entry that provides the order in which
+Finally, `"supply_priority"` is an **optional** entry that provides the order in which
 supply is allocated to meet home demand for power. If specified, the entry **must** be a
 three element list that states the order of `"GRID_SUPPLY"`, `"PW_SUPPLY"` and 
-`"SOLAR_SUPPLY"`. If `"supplyPriority"` is omitted, it defaults to the list specified
+`"SOLAR_SUPPLY"`. If `"supply_priority"` is omitted, it defaults to the list specified
 above (grid, powerwall, and then solar).
 
 This list is used to allocate supply to demand as follows:
@@ -523,6 +562,53 @@ build your own agent (if not, let me know via an issue and I'll see if I can hel
 an agent for your use case).
 
 ## Grafana setup
+
+### JSON payload
+
+The usage datasource supports a `payload` dictionary, which can be specified in the 
+grafana query configuration, as shown in TODO insert screen shot. 
+
+The supported payload entries are:
+
+```
+{
+  "summary": [true | false], 
+  "month_to_date": [true | false], 
+  "year_to_date": [true | false], 
+  "resample": [true | false], 
+}
+```
+1) If `summary` is `true` (default `false`), the values for each variable over the 
+reporting range are summed to give total power and total costs, and the resulting totals
+are returned (per interval values are not reported/discarded). Note that transforms
+can be used in grafana to get the same result if you want to work with both time series
+and summary values (use `false` in this case). 
+
+2) Setting `month_to_date` to `true` (default `false`), the report time range is 
+replaced with the current calendar month (utility for dashboard reporting). Both 
+`summary` and `resample` apply normally. 
+
+3) Setting `year_to_date` to `true` (default `false`), the report time range is 
+replaced with the current year based on the `year_anchor` setting (utility for dashboard
+reporting). Both `summary` and `resample` apply normally. If `month_to_date` and 
+`year_to_date` are both true, `year_to_date` takes priority and is reported.
+
+4) If `resample` is `true` (note: unquoted, lower case!), the usage data is resampled
+   according to the following rules: 
+
+    | Query time range | Resampling |
+    |------------------|------------|
+    | Within a single day    | Hourly     |
+    | Within a single month  | Weekly     |
+    | Within a single year   | Monthly    |
+    | Larger intervals       | Yearly     |
+
+    In this context within a single day means the query interval is for one calendar day
+    maximum, and so on for the other intervals. If resample is set to false, the data is 
+    not resampled and output is returned at the raw influx database query intervals. 
+
+    The default resampling is `true`, and this can also be over-ridden in `usage.json`.
+    If `summary` is `true`, `resample` is ignored.
 
 ### JSON datasource
 

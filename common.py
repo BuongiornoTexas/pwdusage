@@ -9,10 +9,11 @@
  For more information see https://github.com/jasonacox/pypowerwall
 
 """
-# cspell: ignore dataframe
+# cspell: ignore dataframe levelname
 
 from typing import Optional
 from enum import StrEnum, unique
+import logging
 
 # These are friendly versions of static pandas column names.
 # Some new column names may also be derived from these (e.g. cost columns in
@@ -26,6 +27,9 @@ from enum import StrEnum, unique
 # The exceptions to this rule are per tariff column names for energy and costs. These
 # are be created dynamically from the calculated column name by the usage engine.
 
+# Global logger
+logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
+log = logging.getLogger("proxy")
 
 @unique
 class PDColName(StrEnum):
