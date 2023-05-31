@@ -23,6 +23,7 @@ naming consistency.
 reports, and select year to date or month to date reporting (which ignore the grafana
 range).
 - Month anchor for annual reporting, weekday anchor for monthly reporting by week.
+- CLI interface to dump out csv format files for debugging.
 
 # Powerwall-Dashboard-usage-proxy
 
@@ -719,3 +720,6 @@ shoot.
 
 If you do get the expected response, you can now modify the `usage.json` file to
 reflect your own tariff structure.
+
+Finally, you can run the engine in cli mode to generate .csv dump files for debugging.
+For this, use `py engine.py [arguments]`, with help available from `py engine.py -h`.

@@ -1014,7 +1014,7 @@ class UsageEngine:
                 ).sum(numeric_only=True)
 
             elif start.year == stop.year and start.month == stop.month:
-                # to_period is the elegant of doing this check, but pandas raises a 
+                # to_period is the elegant of doing this check, but pandas raises a
                 # UserWarning about losing tz info that we don't want to suppress.
                 # So we go with a more heavy handed check.
                 if self.week_anchor == "MONTH":
@@ -1027,7 +1027,7 @@ class UsageEngine:
                 ).sum(numeric_only=True)
 
             elif (stop.year - start.year) * 12 + stop.month - start.month <= 11:
-                # Anything less than a year, sample on monthly basis. 
+                # Anything less than a year, sample on monthly basis.
                 # I think the above test captures this, but ... I may have missed an
                 # edge case.
                 self._frame = self._frame.resample(
@@ -1144,19 +1144,19 @@ if __name__ == "__main__":
         description="Simple debug interface to Powerwall Dashboard usage engine."
         "\nstart and end are required, month to date, year to date not supported."
     )
-    """parser.add_argument(
+    parser.add_argument(
         "--start",
         # cspell: disable-next-line
-        help="Start date/time for reporting. Local time, no tz info - YYYY-MM-DDTHH:MM.", 
-        required=True
+        help="Start date/time for reporting. Local time, no tz info - YYYY-MM-DDTHH:MM.",
+        required=True,
     )
-    
+
     parser.add_argument(
         "--end",
         # cspell: disable-next-line
         help="Start date/time for reporting. Local time, no tz info - YYYY-MM-DDTHH:MM.",
-        required=True
-    )"""
+        required=True,
+    )
 
     parser.add_argument(
         "--config",
@@ -1169,6 +1169,10 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--disable-resample", help="Summary report only.", action="store_true"
+    )
+
+    parser.add_argument(
+        "--outfile", help="Output file/filepath, writes .csv format", required=True
     )
 
     parser.add_argument("--debug", help="Provide debug logging.", action="store_true")
@@ -1190,7 +1194,7 @@ if __name__ == "__main__":
         .astimezone(tz=timezone.utc)
     )
     stop = (
-        datetime.fromisoformat(args.stop)
+        datetime.fromisoformat(args.end)
         .replace(tzinfo=usage._timezone)
         .astimezone(tz=timezone.utc)
     )
@@ -1199,3 +1203,6 @@ if __name__ == "__main__":
         log.setLevel(LOG_DEBUG)
 
     usage.usage(start_utc=start, stop_utc=stop, payload=None, request_content=None)
+
+    # Because I'm over this, reach in to grab frame.
+    usage._frame.to_csv(args.outfile)
