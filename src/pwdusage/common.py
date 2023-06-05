@@ -9,7 +9,7 @@
  For more information see https://github.com/jasonacox/pypowerwall
 
 """
-# cspell: ignore dataframe levelname
+# cspell: ignore dataframe levelname pwdusage
 
 from typing import Optional
 from enum import StrEnum, unique
@@ -30,6 +30,10 @@ import logging
 # Global logger
 logging.basicConfig(format="%(levelname)s: %(message)s", level=logging.INFO)
 log = logging.getLogger("proxy")
+
+# Only using this once at the moment. But because we are use it for version info, 
+# I'm making it available throughout the package.
+PACKAGE = "pwdusage"
 
 @unique
 class PDColName(StrEnum):

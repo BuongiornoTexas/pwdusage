@@ -7,7 +7,7 @@
 
 """
 # cspell: ignore pydantic simples astype simplejson rollforward pydatetime
-# cspell: ignore dayofweek
+# cspell: ignore dayofweek pwdusage
 
 # I've gone back and forth on treating this as a module with globals or a class.
 # I've ended up going class as there is enough going on that it will just
@@ -42,8 +42,8 @@ from logging import DEBUG as LOG_DEBUG
 
 from influxdb_client import InfluxDBClient, QueryApi  # type: ignore
 
-from common import PDColName, log
-from base_agent import UsageAgent
+from pwdusage.common import PDColName, log
+from pwdusage.base_agent import UsageAgent
 
 DEFAULT_CONFIG = "./usage.json"
 SUPPLY_PRIORITY = "supply_priority"
@@ -171,7 +171,7 @@ class UsagePlan:
         match name:
             case "Simple":
                 # follow this structure to add new agents.
-                from simple_agent import SimpleAgent
+                from pwdusage.simple_agent import SimpleAgent
 
                 self._agent_class = SimpleAgent
             case _:

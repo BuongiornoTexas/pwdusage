@@ -12,18 +12,18 @@
     This server will pull energy use data from the Powerwall-Dashboard Influx Database
     and process it into energy usage data matching utility usage plans.
 """
-# cspell: ignore levelname simplejson
+# cspell: ignore levelname simplejson pwdusage
 from typing import Any
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
 import simplejson  # type: ignore
 import ssl
+from importlib.metadata import version
 
-from common import log
-from engine import UsageEngine
+from pwdusage.common import log, PACKAGE
+from pwdusage.engine import UsageEngine
 from logging import DEBUG as LOG_DEBUG
 
-BUILD = "v0.9.1"
 HTTP_GET_ERROR = "GET Error."
 HTTP_PUT_ERROR = "PUT Error."
 HTTPS = "HTTPS"
@@ -155,7 +155,7 @@ if __name__ == "__main__":
 
     log.info(
         "Powerwall-Dashboard usage proxy server [%s] - %s Port %d"
-        % (BUILD, http_type, port)
+        % (version(PACKAGE), http_type, port)
     )
 
     if os.getenv("USAGE_DEBUG", "no") == "yes":

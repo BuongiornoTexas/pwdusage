@@ -12,12 +12,12 @@ This agent is stateless, so __init__ is not required.
 
 
 """
-# cspell: ignore
+# cspell: ignore pwdusage
 
 from typing import Any
 from pandas import DataFrame, Series  # type: ignore
-from base_agent import UsageAgent
-from common import PDColName
+from pwdusage.base_agent import UsageAgent
+from pwdusage.common import PDColName
 
 
 class SimpleAgent(UsageAgent):

@@ -1,17 +1,24 @@
 <!---
-# cspell: ignore venv beautifulsoup tzdata numpy simplejson datasource
+# cspell: ignore venv beautifulsoup tzdata numpy simplejson datasource pypi pwdusage
 ---> 
 
 # Change Log
 
 I'm tracking progress towards v1.0 at: 
-https://github.com/BuongiornoTexas/PW-Dashboard-usage-proxy/issues/1
+https://github.com/BuongiornoTexas/pwdusage/issues/1.
 
+From v0.9.4, the python/microservice is feature complete. Releases up to v1.0 will 
+address bug fixes and documentation (and incorporate any new agent contributions). 
 
 ## Breaking
 
 This section notes any breaking changes, from newest to oldest.
 
+- **v0.9.4**. 
+  - Project renamed to pwdusage to give a shorter name for pypi package.
+  - Separated python component from dashboard components. In the interim, the latter can
+  be found at:  https://github.com/BuongiornoTexas/Powerwall-Dashboard/tree/main/tools/usage-service, and should be integrated into the main tree after beta phase.
+  - First release of python package from pypi, new install procedure.
 - **v0.9.1**. "supplyPriority" in `usage.json` renamed to "supply_priority" to improve
 naming consistency.
 
@@ -25,7 +32,7 @@ range).
 - Month anchor for annual reporting, weekday anchor for monthly reporting by week.
 - CLI interface to dump out csv format files for debugging.
 
-# Powerwall-Dashboard-usage-proxy
+# pwdusage
 
 Usage (mainly time of use) proxy microservice for Powerwall-Dashboard
 
@@ -71,8 +78,9 @@ the historical data may not reflect optimisation for the tariff).
 
 TODO: Set up docker container for microservice. Until this is done time, users will
 either need to prepare a custom docker image, or follow the 
-["Installation for test users"](#installation-for-developmenttesting) instructions below
-to setup a stand alone pypowerwall server instance for running the usage engine.
+["Installation for development/testing"](#installation-for-developmenttesting) 
+instructions below to setup a stand alone server instance for running the
+usage engine.
 
 # Configuration
 
@@ -81,11 +89,11 @@ Because there are so many different tariffs, configuration will require setting 
 need to do some customisation in grafana to get report out in the format you prefer.
 
 This repository contains a file named `example_usage.json` that you can use to build
-your own `usage.json`. If you are running a stand alone server, use `USAGE_JSON` to
-specify the path to your configuration file (the environment variable must specify the 
-path and the file name, and you may use a different file name if you prefer). If you do
-not specify the environment variable it will default to it will default to searching 
-for `usage.json` in the python working directory. 
+your own `usage.json`. If you are running a stand alone server, use a `USAGE_JSON` 
+environment variable to specify the path to your configuration file (the environment
+variable must specify the path and the file name, and you may use a different file name
+if you prefer). If you do not specify the environment variable it will default to it
+will default to searching for `usage.json` in the python working directory. 
 
 If you are running the usage engine from a docker instance, you **must** specify the 
 `USAGE_JSON` environment variable, as there is no default configuration file. TODO more 
@@ -404,7 +412,7 @@ rules for tariff schedules are:
   Specific notes on "periods" and "days":
   - At least one day **must** be specified in "days".
   - At least one period **must** be specified in "periods".
-  - Each entry is "< tariff start time in 24:00 notation>": "< tariff name>".
+  - Each entry is "[tariff start time in 24:00 notation]": "[tariff name]".
   - Tariffs must appear in chronological order! The usage engine calculates the tariff
   active duration as the difference between two entries.
   - You can pick any period to start the list (but to keep your head in one piece, it 
@@ -447,13 +455,13 @@ dictionary has the following structure:
 
 [**required**] The date key specifies the starting date for the calendar entry. The
 first entry in date order **must** contain the following sub-elements:
-- [**required**] "plan": "< plan name>", where `<plan name>` is the plan that will be
+- [**required**] "plan": "[plan name]", where `plan name` is the plan that will be
 active from the start date, and must correspond to one of the plans in the "plans"
 section.
-- [**required**] "season": "< season name>", where `season name` is the season of
+- [**required**] "season": "[season name]", where `season name` is the season of
 `plan name` that will be active from the start date, and must match one of the seasons
 in `plan name`.
-- [**required**] "tariffs": < dictionary of tariff rate tables>. In the above example,
+- [**required**] "tariffs": [dictionary of tariff rate tables]. In the above example,
 "Peak" and "Off-peak" rate tables specify cost and savings rates for various supplies
 and exports - you can flip the sign of savings and costs if you prefer. Unfortunately, 
 if you are not interested in cost data, you must still specify at least one tariff rate
@@ -562,12 +570,48 @@ If you know your way around python, you can follow the structure of `simple_agen
 build your own agent (if not, let me know via an issue and I'll see if I can help built
 an agent for your use case).
 
-## Grafana setup
+# Grafana setup
+
+## JSON datasource
+
+TODO add images to this section.
+
+If you are using a test usage server, start it now. For a first time run, I'd suggest
+using the example `usage.json` with edits to reflect your influx hostname and 
+local timezone. 
+
+From the general grafana configuration (bottom left):
+
+- Select `Data sources`.
+- Click `Add data source` and add a JSON data source.
+- Give it a name - the example dash board uses `JSON Usage`. 
+- Set the URL to: `http://<hostname>:<port>/usage_engine`. The default usage engine port
+is 9050, but you can override this via the `USAGE_PORT` environment variable.
+- Hit "Save and Test". You should see two green tick messages "Datasource updated" and 
+"Data source is working". 
+
+### Datasource troubleshooting
+
+If the usage engine service has not started properly, the second message will show a 
+green "Testing ..." for a while, followed by a red/pink "Gateway Timeout".
+
+If the datasource url is incorrect, the second message will read: "Not Found". 
+
+If the server has started and the url is correct, but there is problem with the usage
+engine configuration, the second message will read: "status code 599". In this case,
+try:
+
+- Using a web browser to open `http://<hostname>:<port>/usage_engine`. The page may 
+give some hints.
+- Check the server log (if you are running docker, check the docker log).
+- If none of this helps, raise an issue at: 
+  `https://github.com/BuongiornoTexas/pwdusage/issues`.
 
 ### JSON payload
 
 The usage datasource supports a `payload` dictionary, which can be specified in the 
-grafana query configuration, as shown in TODO insert screen shot. 
+grafana query configuration, as shown in TODO insert screen shot. TODO This may belong
+in the next section?
 
 The supported payload entries are:
 
@@ -611,65 +655,59 @@ reporting). Both `summary` and `resample` apply normally. If `month_to_date` and
     The default resampling is `true`, and this can also be over-ridden in `usage.json`.
     If `summary` is `true`, `resample` is ignored.
 
-### JSON datasource
-
-TODO add images to this section.
-
-If you are using a test usage server, start it now. For a first time run, I'd suggest
-using the example `usage.json` with edits to reflect your influx hostname and 
-local timezone. 
-
-From the general grafana configuration (bottom left):
-
-- Select `Data sources`.
-- Click `Add data source` and add a JSON data source.
-- Give it a name - the example dash board uses `JSON Usage`. 
-- Set the URL to: `http://<hostname>:<port>/usage_engine`. The default usage engine port
-is 9050, but you can override this via the `USAGE_PORT` environment variable.
-- Hit "Save and Test". You should see two green tick messages "Datasource updated" and 
-"Data source is working". 
-
-##### Datasource troubleshooting
-
-If the usage engine service has not started properly, the second message will show a 
-green "Testing ..." for a while, followed by a red/pink "Gateway Timeout".
-
-If the datasource url is incorrect, the second message will read: "Not Found". 
-
-If the server has started and the url is correct, but there is problem with the usage
-engine configuration, the second message will read: "status code 599". In this case,
-try:
-
-- Using a web browser to open `http://<hostname>:<port>/usage_engine`. The page may 
-give some hints.
-- Check the server log (if you are running docker, check the docker log).
-- If none of this helps, raise an issue at: 
-  `https://github.com/BuongiornoTexas/PW-Dashboard-usage-proxy/issues`.
-
-### Dashboard setup
+## Grafana Dashboard setup
 
 TODO write this section.
+
+Note: as of version 0.9.4, the sample grafana files discussed in this section are held
+at: 
+https://github.com/BuongiornoTexas/Powerwall-Dashboard/tree/main/tools/usage-service.
 
 In the interim, I've provided example dashboard called `example_dashboard.json`. Import
 this into grafana and have an explore.
 
 # Installation for development/testing 
 
-As I'm doing this development on a windows machine and don't want to deal with 
-repeatedly creating multiple docker containers, I run a stand alone test server. Unless
-you know python and docker well, I'd recommend you follow the same approach for your own
-development and testing. The main steps are:
+## Testing pwdusage
+
+As of version 0.9.4, `pwdusage` is available as a pypi package, and it and its 
+dependencies can be installed using pip. This is the recommended method if you want to
+test the service and don't want to set up the docker container or do any development.
+
+Optional, but strongly recommended: set up a python virtual environment for installing
+and running `pwdusage` (please refer to the python documentation for details). To 
+install:
+```
+pip install pwdusage
+```
+
+After installation, you can run the server with:
+```
+py -m pwdusage.server
+```
+If you want to generate .csv dumps for testing/debugging, the CLI help is available
+from:
+```
+py -m pwdusage.engine -h
+```
+
+## Debugging and Development
+
+If you are debugging the current code or developing new usage agents, this section 
+outlines my approach to setting up a test/development environment (based on my fairly
+limited python experience - if you know what you are doing, this section can be
+ignored).
+
+The main steps are:
 
 - You will need to be running python 3.11 or higher. 
-- I strongly suggest using a test python environment. 
+- I strongly suggest using a separate python virtual environment for development. 
 
    `py -m venv usage_test`
 
-- Activate your environment and install simplejson, and the influxdb Flux client (I'm
-running without the high efficiency c iso 8601 library for now). The `[extra]` also 
-installs numpy and pandas.You may also need to install `tzdata` (I did on windows in the
-early stages, but haven't had trouble since - if you get errors about time zones, this
-is probably it). 
+- Activate your environment (refer python docs) and install simplejson, and the
+influxdb Flux client (I'm running without the high efficiency c iso 8601 library for 
+now). The `[extra]` also installs numpy and pandas. 
 
   `pip install simplejson`
 
@@ -677,12 +715,18 @@ is probably it).
 
 - Clone my (@BuongiornoTexas) usage engine repository to a working directory. 
 
-- Configure your test server, which is a cut down version of the pypowerwall server used
-by the dashboard. You can specify environment variables for the the JSON configuration
-file, server bind address, debugging, server port and HTTPS mode [TODO - https is not
-working at the moment] (`USAGE_JSON, USAGE_BIND_ADDRESS, USAGE_DEBUG, USAGE_PORT, 
-USAGE_HTTPS`). For example, my vscode `launch.json` specifies port 9050 (the default)
-for the test server and the location of the configuration file: 
+- Use pip to create an editable install from the working directory:
+
+  `pip install --editable .`
+
+  (When you are done, you can uninstall with `pip uninstall pwdusage`)
+
+- Configure your usage proxy server. You can specify environment variables for the
+JSON configuration file, server bind address, debugging, server port and HTTPS mode
+[TODO - https is not working at the moment] (`USAGE_JSON, USAGE_BIND_ADDRESS,
+USAGE_DEBUG, USAGE_PORT, USAGE_HTTPS`). For example, my vscode `launch.json`
+specifies port 9050 (the default) for the test server and the location of the
+configuration file: 
 ```
 {
     "version": "0.2.0",
@@ -706,14 +750,17 @@ for the test server and the location of the configuration file:
 `USAGE_JSON` environment variable to point at this file and modify the contents of the
 file  so that `influx_url` points at your influx server (probably the same machine as
 your Powerwall-Dashboard) and your `timezone` is correct.
-- At this point, you should be able to run `server.py` from the @Buongiorno repo - for 
-me, `py proxy\server.py` works. You should then check that the usage engine is 
-responding by pointing a web browser at `http://server.address:<port>/usage_engine`. 
+- At this point, you should be able to run the server using: 
+  ```
+  py -m pwdusage.server
+  ```
+  You should then check that the usage server is responding by pointing a web browser at
+  `http://server.address:<port>/usage_engine`. 
 - If everything is as it should be, you should see a page containing the message:
 
-```
-Usage Engine Status	"Engine OK, tariffs (re)loaded"
-```
+  ```
+  Usage Engine Status	"Engine OK, tariffs (re)loaded"
+  ```
 If you don't see this, please check that you are using the unmodified `usage.json`. If 
 you still have problems, let us know on the dev issue thread to see if we can trouble 
 shoot.
@@ -722,4 +769,5 @@ If you do get the expected response, you can now modify the `usage.json` file to
 reflect your own tariff structure.
 
 Finally, you can run the engine in cli mode to generate .csv dump files for debugging.
-For this, use `py engine.py [arguments]`, with help available from `py engine.py -h`.
+For this, use `py -m pwdusage.engine [arguments]`, with help available from 
+`py pwdusage.engine -h`.

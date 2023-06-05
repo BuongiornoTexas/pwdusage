@@ -11,9 +11,9 @@
 from typing import Any
 from abc import ABC, abstractmethod
 from pandas import DataFrame, Series  # type:ignore
-from common import PDColName
+from pwdusage.common import PDColName
 
-# cspell: ignore metaton dataframe
+# cspell: ignore metaton dataframe pwdusage
 
 
 class UsageAgent(ABC):
