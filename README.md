@@ -17,12 +17,17 @@ This section notes any breaking changes, from newest to oldest.
 - **v0.9.4**. 
   - Project renamed to pwdusage to give a shorter name for pypi package.
   - Separated python component from dashboard components. In the interim, the latter can
-  be found at:  https://github.com/BuongiornoTexas/Powerwall-Dashboard/tree/main/tools/usage-service, and should be integrated into the main tree after beta phase.
+  be found at:
+  https://github.com/BuongiornoTexas/Powerwall-Dashboard/tree/main/tools/usage-service,
+  and should be integrated into the main tree after beta phase.
   - First release of python package from pypi, new install procedure.
 - **v0.9.1**. "supplyPriority" in `usage.json` renamed to "supply_priority" to improve
 naming consistency.
 
 ## New Features
+
+**v0.9.5** Documentation for building and testing docker image, instructions for adding
+the docker container to the Powerwall-Dashboard stack.
 
 **v0.9.1**
 - Resampling to more useful periods for bar charts.
@@ -76,35 +81,139 @@ the historical data may not reflect optimisation for the tariff).
 
 # Setup
 
-TODO: Set up docker container for microservice. Until this is done time, users will
-either need to prepare a custom docker image, or follow the 
-["Installation for development/testing"](#installation-for-developmenttesting) 
-instructions below to setup a stand alone server instance for running the
-usage engine.
+This section details setup for end users. Developers and users who wish to use the CLI
+components should refer to 
+["Installation for development/testing"](#installation-for-developmenttesting), which
+details setting up a local server instance running under python.
 
-# Configuration
+All of the script and configuration files referred to in this document can be found in
+the `tool/usage-service` subfolder of the 
+[`Powerwall-Dashboard` repo](https://github.com/jasonacox/Powerwall-Dashboard). (As 
+they belong with the Dashboard rather the python service.)
 
-Because there are so many different tariffs, configuration will require setting up a
-`usage.json` file to define usage plans and calendars, and you will very likely also
-need to do some customisation in grafana to get report out in the format you prefer.
+(If you can't find files that this document refers to, it is possible that this
+version of `pwdusage` contains files that have not yet been committed to the main
+repository - check https://github.com/BuongiornoTexas/Powerwall-Dashboard for work in
+progress).
 
-This repository contains a file named `example_usage.json` that you can use to build
-your own `usage.json`. If you are running a stand alone server, use a `USAGE_JSON` 
-environment variable to specify the path to your configuration file (the environment
-variable must specify the path and the file name, and you may use a different file name
-if you prefer). If you do not specify the environment variable it will default to it
-will default to searching for `usage.json` in the python working directory. 
+## Open firewall port
 
-If you are running the usage engine from a docker instance, you **must** specify the 
-`USAGE_JSON` environment variable, as there is no default configuration file. TODO more 
-detail on USAGE_JSON environment variable for docker build. 
+Decide which port the usage micro-service will use and make the changes required to
+allow your grafana host to access this port (and any other machine that might need 
+access). For example, I'm using ufw on my local network:
+```
+ufw allow from 192.168.xxx.0/24 to any port 9050 proto tcp
+```
 
-While most of the heavy lifting is done in the `usage.json` file, this configuration 
-file depends heavily on constants defined in `common.py`. The next sections
-details these constants, the structure of `usage.json`, and finally outlines grafana
-customisation steps.
+## Build Docker Image
+
+I have provided utility scripts to build the docker image for your local machine. 
+Depending on demand, this may become a distributed image in the future. 
+
+Open a terminal and navigate to the `tools/usage-service` sub-folder of 
+`Powerwall-Dashboard`. In this folder generate the image using:
+```
+bash build.sh
+```
+Note for developers: This script will delete any existing `pwdusage` images and 
+containers (if you are a normal end user, this is most likely what you want to happen).
+
+## Test Docker Image
+
+This is an optional step which may be useful for trouble shooting. The test process
+is as follows:
+
+- Navigate to the `tools/usage-service` sub-folder of `Powerwall-Dashboard`.
+- Copy the `example_usage.json` file to `usage.json` in the `usage-service` folder.
+- Edit `usage.json` so that file  so that `influx_url` points at your influx server
+(probably the same machine as your Powerwall-Dashboard) and, optionally, set the correct
+ `timezone` for your region.
+- Run a test script which performs the following actions:
+  - Stops and deletes the `pwdusage` container.
+  - Creates and start a new `pwdusage` container configured by the test `usage.json`.
+  - Pauses while you check the server status.
+  
+  The test script command is:
+  ```
+  bash test_service.sh
+  ```
+
+- Check that the usage server is responding by pointing a web browser at
+`http://server.address:<port>/usage_engine`. If everything is as it should be, you
+ should see a page containing the message:
+
+  ```
+  Usage Engine Status	"Engine OK, tariffs (re)loaded"
+  ```
+- Return to the terminal running the test script and hit enter. This will clean up the
+test by stopping and deleting the container (but keeps the image you created in the
+previous section). 
+
+The next sections details adding the usage service to your 
+`Powerwall-Dashboard` stack.
+
+## Add `pwdusage` to `Powerwall-Dashboard`
+
+This step assumes you have set up a `usage.json` configuration file in the 
+`tools/usage-service` subfolder of Powerwall-Dashboard. See the previous section for
+using the example file, and the following section for details on setting it up to
+match your own usage plan.
+
+The `pwdusage` install steps are:
+
+- If `powerwall.extend.yml` exists in your `Powerwall-Dashboard` folder, then copy the 
+contents of the `pwdusage.extend.yml` file starting from the line `pwdusage:` into 
+`powerwall.extend.yml` (this should be in the services section).
+- Otherwise, copy `pwdusage.extend.yml` into the `Powerwall-Dashboard` folder and rename
+it to `powerwall.extend.yml`.
+- Edit `powerwall.extend.yml` to reflect your user id and any changes you may have made
+to the default port and `USAGE_JSON` file path.
+
+Finally, restart the Powerwall-Dashboard services:
+```
+./compose-dash.sh stop
+./compose-dash.sh up -d
+```
+
+# `pwdusage` Configuration
+
+Because there are so many different usage plans, `pwdusage` requires a JSON
+configuration file to define *your* usage plans and calendars. This section discusses
+the layout of this file and the how usage engine locates this file. You will very likely
+also need to do some customisation in grafana to get report out in the format you
+prefer, which the next section covers.
+
+The project documentation assumes this file will be named  `usage.json` file. However,
+you can use any name you like in conjunction with the `USAGE_JSON` environment variable
+(see below).
+
+The `tools/usage-service` folder in Powerwall-Dashboard repository contains a file named `example_usage.json` that you can use to build your own `usage.json`. The recommended
+default location for your `usage.json` is the `tools/usage-service` folder. (As a 
+convenience for developers, this example file is also duplicated in the `pwdusage` usage repostory.)
+
+## Loading `usage.json`
+
+The usage engine will look for the configuration files in the following locations:
+- You can use the environment variable `USAGE_JSON` to specify the (optional) path and
+the file name for the configuration file. You **must** use this method for running a
+usage server in a **docker container** (most users). See the `pwdusage.extend.yml` and 
+`test_service.sh` files in the previous sections for examples of mapping a local copy of
+`usage.json` to a docker container volume.  
+- If the environment variable is not specified, the enginer will try to load 
+`usage.json` from the working directory. 
+- If you are running the engine in CLI mode to dump csv files, you **must** specify the
+location of the configuration file (optional path + file name) using the `--config`
+argument. `USAGE_JSON` is ignored in this mode.
+
+Note: if you have followed the steps for adding `pwdusage` to the Powerwall-Dashboard
+docker stack and your `usage.json` is in the recommended location, everything should run
+out of the box. 
 
 ## Strings from `common.py`
+
+While most of the heavy lifting is done in the `usage.json` file, this configuration 
+file depends heavily on constants defined in `common.py`. This section outlines these
+constants.
 
 The strings defined in the `PDColName` Enum in `common.py` are labels for key calculated
 data columns in the usage engine. You may choose to output any subset of the numeric
@@ -746,10 +855,9 @@ configuration file:
     ]
 }
 ```
-- For initial testing, create a copy of the `example_usage.json` file, set the 
-`USAGE_JSON` environment variable to point at this file and modify the contents of the
-file  so that `influx_url` points at your influx server (probably the same machine as
-your Powerwall-Dashboard) and your `timezone` is correct.
+- For initial testing, create a `usage.json` configuration file as detailed in 
+[Test Docker Image](#test-docker-image).
+- Set the `USAGE_JSON` environment variable to point at this `usage.json`.
 - At this point, you should be able to run the server using: 
   ```
   py -m pwdusage.server
@@ -761,12 +869,13 @@ your Powerwall-Dashboard) and your `timezone` is correct.
   ```
   Usage Engine Status	"Engine OK, tariffs (re)loaded"
   ```
-If you don't see this, please check that you are using the unmodified `usage.json`. If 
+If you don't see this, please check that `usage.json` matches the description in 
+[Test Docker Image](#test-docker-image). If 
 you still have problems, let us know on the dev issue thread to see if we can trouble 
 shoot.
 
 If you do get the expected response, you can now modify the `usage.json` file to
-reflect your own tariff structure.
+reflect your own tariff structure [`pwdusage` Configuration](#pwdusage-configuration).
 
 Finally, you can run the engine in cli mode to generate .csv dump files for debugging.
 For this, use `py -m pwdusage.engine [arguments]`, with help available from 
