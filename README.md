@@ -1,7 +1,6 @@
 <!---
 # cspell: ignore venv beautifulsoup tzdata numpy simplejson datasource pypi pwdusage
 ---> 
-![image](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/2bfe1062-b7b1-40a4-8870-32ca474a9421)
 
 # Change Log
 
@@ -682,21 +681,23 @@ an agent for your use case).
 
 # Grafana setup
 
+This section assumes you have already got a 
+[docker](#add-pwdusage-to-powerwall-dashboard) or [stand alone](#installation-for-developmenttesting) `pwdusage` server up and running, and you know 
+the hostname/host address and port for the server.
+
 ## JSON datasource
 
-TODO add images to this section.
-
-If you are using a test usage server, start it now. For a first time run, I'd suggest
-using the example `usage.json` with edits to reflect your influx hostname and 
-local timezone. 
-
-From the general grafana configuration (bottom left):
+From the general grafana configuration (cog wheel icon, bottom left):
 
 - Select `Data sources`.
 - Click `Add data source` and add a JSON data source.
 - Give it a name - the example dash board uses `JSON Usage`. 
 - Set the URL to: `http://<hostname>:<port>/usage_engine`. The default usage engine port
-is 9050, but you can override this via the `USAGE_PORT` environment variable.
+is 9050, but you can override this via the docker `.yml` configuration or via 
+`USAGE_PORT` for a stand alone server.
+
+  ![image](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/2bfe1062-b7b1-40a4-8870-32ca474a9421)
+
 - Hit "Save and Test". You should see two green tick messages "Datasource updated" and 
 "Data source is working". 
 
@@ -717,11 +718,21 @@ give some hints.
 - If none of this helps, raise an issue at: 
   `https://github.com/BuongiornoTexas/pwdusage/issues`.
 
+## Grafana Dashboard setup
+
+TODO write this section.
+
+Note: as of version 0.9.4, the sample grafana files discussed in this section are held
+at: 
+https://github.com/BuongiornoTexas/Powerwall-Dashboard/tree/main/tools/usage-service.
+
+In the interim, I've provided example dashboard called `example_dashboard.json`. Import
+this into grafana and have an explore.
+
 ### JSON payload
 
 The usage datasource supports a `payload` dictionary, which can be specified in the 
-grafana query configuration, as shown in TODO insert screen shot. TODO This may belong
-in the next section?
+grafana query configuration, as shown in TODO insert screen shot.
 
 The supported payload entries are:
 
@@ -764,17 +775,6 @@ reporting). Both `summary` and `resample` apply normally. If `month_to_date` and
 
     The default resampling is `true`, and this can also be over-ridden in `usage.json`.
     If `summary` is `true`, `resample` is ignored.
-
-## Grafana Dashboard setup
-
-TODO write this section.
-
-Note: as of version 0.9.4, the sample grafana files discussed in this section are held
-at: 
-https://github.com/BuongiornoTexas/Powerwall-Dashboard/tree/main/tools/usage-service.
-
-In the interim, I've provided example dashboard called `example_dashboard.json`. Import
-this into grafana and have an explore.
 
 # Installation for development/testing 
 
