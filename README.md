@@ -2,6 +2,8 @@
 # cspell: ignore venv beautifulsoup tzdata numpy simplejson datasource pypi pwdusage
 ---> 
 
+TODO Insert Hero Image
+
 # Change Log
 
 I'm tracking progress towards v1.0 at: 
@@ -720,19 +722,67 @@ give some hints.
 
 ## Grafana Dashboard setup
 
-TODO write this section.
+This section outlines the basics of setting up grafana dashboards based on usage 
+queries. It refers to the example dashboards in the `tools/usage-service` folder, and
+these also provide useful starting points for developing your own dashboard. The two
+sample dashboards are: 
+- A 7 day usage detail dashboard (the image at the top of this README), which uses
+hourly data generated from the example `usage.json`.
+- A month to date summary dash which presents summary statistics for the month to date
+using the `summary` and `month_to_date` payload entries detailed in the following
+section. The output is shown in the following image and is similar to that presented
+in the detailed dashboard. 
 
-Note: as of version 0.9.4, the sample grafana files discussed in this section are held
-at: 
-https://github.com/BuongiornoTexas/Powerwall-Dashboard/tree/main/tools/usage-service.
+TODO insert mtd image. 
 
-In the interim, I've provided example dashboard called `example_dashboard.json`. Import
-this into grafana and have an explore.
+Note that I have not spent too much time on either colors or layout, as each user will
+need to customise these reports to match their utility and their own reporting needs.
+(I know I've still got a bit of work to do on my own!) However, the example dashboards
+do provide a reasonable idea of what you can do with the usage data and how you can 
+manipulate. I also note that the transforms used in these panels are SLOW on first load
+(a consequence of many panels and transforms). If you want faster performance, use 
+fewer panels for your own reporting. 
+
+The main thing to be aware of when setting up a usage dashboard is that the usage 
+datasource returns **all** time of use data in a **single table**. You should then
+**duplicate** this data to other panels and **filter** the panel data using transforms
+to get the data that you want to present in each panel - this process is outlined below.
+You could also run a separate usage query for each panel, but I suspect the 
+computational overhead will make this even slower than duplicating and filtering (If 
+anybody wants to do some benchmarking, can you please report your results as any
+issue? It seems I'm running out of energy to do this myself).
+
+The process for setting up usage panels is:
+- Choose a **hero** panel which you will use as your main data source. In
+the "Usage Detail" example dashboard, the "Grid Import" panel is the hero panel. Set
+the Data source to match your JSON pwdusage data source ("JSON Usage" in the examples)
+and set the metric to "Usage".
+  
+  TODO screenshot
+
+- For all other usage panels in the dashboard, set the data source to "-- Dashboard --"
+and set the *Use results from panel* field to the name of your hero panel ("Grid 
+Import").
+
+  TODO screenshot
+
+- For each panel, apply a "Filter by Name" transform to select the variables you want
+to present in the panel. You can either select the variables individually, or you
+can use a regex. Either way, if you want to plot against time, you must select "_time"
+or you will get "No data" errors (ask me how I know ...). An example of regexp that
+selects all grid export power and time is "_time|(Grid export).*\(kWh\)".
+
+- The "Add field from calculation" transform is useful for creating subtotals and 
+totals, and the "Organise fields" transform can be useful for hiding intermediate
+values and arranging fields. To see examples of these transforms, check the "Self 
+Consumption Value" summary stat table in the "Usage Detail" example dashboard.
 
 ### JSON payload
 
 The usage datasource supports a `payload` dictionary, which can be specified in the 
-grafana query configuration, as shown in TODO insert screen shot.
+grafana query configuration, as shown in the following image.
+
+TODO insert payload screenshot.
 
 The supported payload entries are:
 
@@ -741,7 +791,7 @@ The supported payload entries are:
   "summary": [true | false], 
   "month_to_date": [true | false], 
   "year_to_date": [true | false], 
-  "resample": [true | false], 
+  "resample": [true | false] 
 }
 ```
 1) If `summary` is `true` (default `false`), the values for each variable over the 
@@ -759,7 +809,7 @@ replaced with the current year based on the `year_anchor` setting (utility for d
 reporting). Both `summary` and `resample` apply normally. If `month_to_date` and 
 `year_to_date` are both true, `year_to_date` takes priority and is reported.
 
-4) If `resample` is `true` (note: unquoted, lower case!), the usage data is resampled
+4) If `resample` is `true` (default), the usage data is resampled
    according to the following rules: 
 
     | Query time range | Resampling |
