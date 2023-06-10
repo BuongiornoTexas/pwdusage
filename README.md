@@ -28,8 +28,11 @@ naming consistency.
 
 ## New Features
 
-**v0.9.5** Documentation for building and testing docker image, instructions for adding
-the docker container to the Powerwall-Dashboard stack.
+**v1.0.0** 
+- Documentation for building and testing docker image, instructions for adding
+the docker container to the Powerwall-Dashboard stack. 
+- Documentation for grafana configuration.
+- Sample dashboards added to the Powerwall-Dashboard repo.
 
 **v0.9.1**
 - Resampling to more useful periods for bar charts.
@@ -726,7 +729,7 @@ This section outlines the basics of setting up grafana dashboards based on usage
 queries. It refers to the example dashboards in the `tools/usage-service` folder, and
 these also provide useful starting points for developing your own dashboard. The two
 sample dashboards are: 
-- A 7 day usage detail dashboard (the image at the top of this README), which uses
+- A usage detail dashboard (the image at the top of this README), which uses
 hourly data generated from the example `usage.json`.
 - A month to date summary dash which presents summary statistics for the month to date
 using the `summary` and `month_to_date` payload entries detailed in the following
@@ -735,16 +738,22 @@ in the detailed dashboard.
 
 ![Usage mtd](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/e344ec31-afea-4027-9a73-4d93756aceb4)
 
-Todo doc this!
+The `usage-service` folder also includes an example drop in replacment panel for the
+main dashboard savings panel - again built around month to date reporting and the
+sample `usage.json` (you'll need to tweak it to match your utility). This panel 
+loads a little slower than most dashboard elements, but still faster than the Tesla
+power flow animation. 
+
 ![Savings panel](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/3c89e711-b775-4139-ba9b-11b17e222de6)
 
-Note that I have not spent too much time on either colors or layout, as each user will
-need to customise these reports to match their utility and their own reporting needs.
-(I know I've still got a bit of work to do on my own!) However, the example dashboards
-do provide a reasonable idea of what you can do with the usage data and how you can 
-manipulate. I also note that the transforms used in these panels are SLOW on first load
-(a consequence of many panels and transforms). If you want faster performance, use 
-fewer panels for your own reporting. 
+Note that I have not spent too much time on colors, layout or performance optimisation,
+as each user will need to customise these reports to match their utility and their own reporting needs. (I know I've still got a bit of work to do on my own!) However, the
+example dashboards do provide a reasonable idea of what you can do with the usage data
+and how you can manipulate it. I also note that the transforms used in these panels
+are SLOW on first load (a consequence of many panels and transforms). If you want
+aster performance, use fewer panels for your own reporting (I'm pretty sure that 
+careful use of transforms could reduce the number of panels in the summary dashboard 
+from 7 to 2 or even 1 - watch this space). 
 
 The main thing to be aware of when setting up a usage dashboard is that the usage 
 datasource returns **all** time of use data in a **single table**. You should then
@@ -767,7 +776,7 @@ and set the metric to "Usage".
 and set the *Use results from panel* field to the name of your hero panel ("Grid 
 Import").
 
-![Duplicate data source](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/8492531b-4577-4a6a-a4f5-c68cee864267) 
+  ![Duplicate data source](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/8492531b-4577-4a6a-a4f5-c68cee864267) 
 
 - For each panel, apply a "Filter by Name" transform to select the variables you want
 to present in the panel. You can either select the variables individually, or you
@@ -780,7 +789,7 @@ totals, and the "Organise fields" transform can be useful for hiding intermediat
 values and arranging fields. To see examples of these transforms, check the "Self 
 Consumption Value" summary stat table in the "Usage Detail" example dashboard.
 
-### JSON payload
+## JSON payload
 
 The usage datasource supports a `payload` dictionary, which can be specified in the 
 grafana query configuration, as shown in the following image.
@@ -797,22 +806,24 @@ The supported payload entries are:
   "resample": [true | false] 
 }
 ```
-1) If `summary` is `true` (default `false`), the values for each variable over the 
+1) Note that `true` and `false` are both uncapitalised and unquoted.
+
+2) If `summary` is `true` (default `false`), the values for each variable over the 
 reporting range are summed to give total power and total costs, and the resulting totals
 are returned (per interval values are not reported/discarded). Note that transforms
 can be used in grafana to get the same result if you want to work with both time series
 and summary values (use `false` in this case). 
 
-2) Setting `month_to_date` to `true` (default `false`), the report time range is 
+3) Setting `month_to_date` to `true` (default `false`), the report time range is 
 replaced with the current calendar month (utility for dashboard reporting). Both 
 `summary` and `resample` apply normally. 
 
-3) Setting `year_to_date` to `true` (default `false`), the report time range is 
+4) Setting `year_to_date` to `true` (default `false`), the report time range is 
 replaced with the current year based on the `year_anchor` setting (utility for dashboard
 reporting). Both `summary` and `resample` apply normally. If `month_to_date` and 
 `year_to_date` are both true, `year_to_date` takes priority and is reported.
 
-4) If `resample` is `true` (default), the usage data is resampled
+5) If `resample` is `true` (default), the usage data is resampled
    according to the following rules: 
 
     | Query time range | Resampling |
