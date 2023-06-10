@@ -2,7 +2,7 @@
 # cspell: ignore venv beautifulsoup tzdata numpy simplejson datasource pypi pwdusage
 ---> 
 
-TODO Insert Hero Image
+![Usage detail 7d](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/f2a014e6-4f17-437e-8ab0-409f5126ea7f)
 
 # Change Log
 
@@ -733,7 +733,10 @@ using the `summary` and `month_to_date` payload entries detailed in the followin
 section. The output is shown in the following image and is similar to that presented
 in the detailed dashboard. 
 
-TODO insert mtd image. 
+![Usage mtd](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/e344ec31-afea-4027-9a73-4d93756aceb4)
+
+Todo doc this!
+![Savings panel](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/3c89e711-b775-4139-ba9b-11b17e222de6)
 
 Note that I have not spent too much time on either colors or layout, as each user will
 need to customise these reports to match their utility and their own reporting needs.
@@ -758,13 +761,13 @@ the "Usage Detail" example dashboard, the "Grid Import" panel is the hero panel.
 the Data source to match your JSON pwdusage data source ("JSON Usage" in the examples)
 and set the metric to "Usage".
   
-  TODO screenshot
+  ![Datasource](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/327c6f36-e0bd-4a9c-9c65-7b8104379dee)
 
 - For all other usage panels in the dashboard, set the data source to "-- Dashboard --"
 and set the *Use results from panel* field to the name of your hero panel ("Grid 
 Import").
 
-  TODO screenshot
+![Duplicate data source](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/8492531b-4577-4a6a-a4f5-c68cee864267) 
 
 - For each panel, apply a "Filter by Name" transform to select the variables you want
 to present in the panel. You can either select the variables individually, or you
@@ -782,7 +785,7 @@ Consumption Value" summary stat table in the "Usage Detail" example dashboard.
 The usage datasource supports a `payload` dictionary, which can be specified in the 
 grafana query configuration, as shown in the following image.
 
-TODO insert payload screenshot.
+![JSON Payload](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/4bf4d2ee-5575-4dbc-87b4-b6c9db7b7597)
 
 The supported payload entries are:
 
