@@ -1,6 +1,7 @@
 <!---
 # cspell: ignore venv beautifulsoup tzdata numpy simplejson datasource pypi pwdusage
 ---> 
+![image](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/2bfe1062-b7b1-40a4-8870-32ca474a9421)
 
 # Change Log
 
