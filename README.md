@@ -2,6 +2,10 @@
 # cspell: ignore venv beautifulsoup tzdata numpy simplejson datasource pypi pwdusage
 ---> 
 
+# pwdusage
+
+A usage (mainly time of use) proxy microservice for Powerwall-Dashboard.
+
 ![Usage detail 7d](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/f2a014e6-4f17-437e-8ab0-409f5126ea7f)
 
 # Change Log
@@ -42,9 +46,7 @@ range).
 - Month anchor for annual reporting, weekday anchor for monthly reporting by week.
 - CLI interface to dump out csv format files for debugging.
 
-# pwdusage
-
-Usage (mainly time of use) proxy microservice for Powerwall-Dashboard
+# Key Features
 
 The following dot points outline key elements of the usage engine:
 
@@ -725,47 +727,51 @@ give some hints.
 
 ## Grafana Dashboard setup
 
-This section outlines the basics of setting up grafana dashboards based on usage 
-queries. It refers to the example dashboards in the `tools/usage-service` folder, and
-these also provide useful starting points for developing your own dashboard. The two
-sample dashboards are: 
+This section outlines setting up grafana dashboards based on usage queries. It refers to
+the example dashboards in the `tools/usage-service` folder, and these also provide
+useful starting points for developing your own dashboard. The sample dashboards are: 
 - A usage detail dashboard (the image at the top of this README), which uses
 hourly data generated from the example `usage.json`.
-- A month to date summary dash which presents summary statistics for the month to date
-using the `summary` and `month_to_date` payload entries detailed in the following
-section. The output is shown in the following image and is similar to that presented
+- Two versions of of a summary statistics dashboard, which use the `summary` payload 
+entry. The [performance sidebar](#performance-sidebar) below explains the difference
+between the versions, and the [JSON payload](#json-payload) section details payload
+options. The v1 output is shown in the following image and is similar to that presented
 in the detailed dashboard. 
 
 ![Usage mtd](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/e344ec31-afea-4027-9a73-4d93756aceb4)
 
-The `usage-service` folder also includes an example drop in replacment panel for the
-main dashboard savings panel - again built around month to date reporting and the
-sample `usage.json` (you'll need to tweak it to match your utility). This panel 
-loads a little slower than most dashboard elements, but still faster than the Tesla
-power flow animation. 
+The `usage-service` folder also includes an example drop in replacement panel for the
+main dashboard savings panel - built around `summary` and `month_to_date` reporting
+(via [JSON payload](#json-payload)) and the sample `usage.json` (you'll need to tweak it
+to match your utility). This panel loads a little slower than most of the dashboard
+elements, but still much faster than the Tesla power flow animation. 
 
 ![Savings panel](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/3c89e711-b775-4139-ba9b-11b17e222de6)
 
-Note that I have not spent too much time on colors, layout or performance optimisation,
-as each user will need to customise these reports to match their utility and their own reporting needs. (I know I've still got a bit of work to do on my own!) However, the
-example dashboards do provide a reasonable idea of what you can do with the usage data
-and how you can manipulate it. I also note that the transforms used in these panels
-are SLOW on first load (a consequence of many panels and transforms). If you want
-aster performance, use fewer panels for your own reporting (I'm pretty sure that 
-careful use of transforms could reduce the number of panels in the summary dashboard 
-from 7 to 2 or even 1 - watch this space). 
+Note 1: I have not spent much time on colors or layout, as each user will need
+to customise these reports to match their utility and their own reporting needs. (I know 
+I've still got a bit of work to do on my own!) However, the example dashboards do
+provide a reasonable idea of what you can do with the usage data and how you can
+manipulate it.
+
+Note 2: Both the detail usage and v1 summary dashboards can be slow to load regardless
+of reporting time interval - refer to the [performance sidebar](#performance-sidebar)
+for reasons and methods to address this issue. The v2 summary dashboard and savings
+panel are quick to load for shorter time intervals (< 1month), but like other grafana
+queries, these will slow down for longer intervals.
 
 The main thing to be aware of when setting up a usage dashboard is that the usage 
-datasource returns **all** time of use data in a **single table**. You should then
-**duplicate** this data to other panels and **filter** the panel data using transforms
-to get the data that you want to present in each panel - this process is outlined below.
-You could also run a separate usage query for each panel, but I suspect the 
-computational overhead will make this even slower than duplicating and filtering (If 
-anybody wants to do some benchmarking, can you please report your results as any
-issue? It seems I'm running out of energy to do this myself).
+datasource performs a set of computationally expensive (i.e. slow) calculations and then
+returns **all** time of use data in a **single table**. Because of this, and as 
+discussed in the [performance side bar](#performance-sidebar), you should call the usage datasource in only one hero panel per dashboard. If you want to use the same usage 
+data in any other panels on a dashboard, you should then **duplicate** this data using
+the internal grafana `-- Dashboard --` datasource. Finally, because the usage
+datasource returns all of the data, you will need to apply filter transforms in each
+usage panel to get the data that you want to present (and discard the data you don't
+want) - this process is outlined below.
 
-The process for setting up usage panels is:
-- Choose a **hero** panel which you will use as your main data source. In
+The process for setting up usage panels in a dashboard is:
+- Choose a **hero** panel which you will use as your main usage data source. In
 the "Usage Detail" example dashboard, the "Grid Import" panel is the hero panel. Set
 the Data source to match your JSON pwdusage data source ("JSON Usage" in the examples)
 and set the metric to "Usage".
@@ -778,8 +784,8 @@ Import").
 
   ![Duplicate data source](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/8492531b-4577-4a6a-a4f5-c68cee864267) 
 
-- For each panel, apply a "Filter by Name" transform to select the variables you want
-to present in the panel. You can either select the variables individually, or you
+- For each usage panel, apply a "Filter by Name" transform to select the variables you
+want to present in the panel. You can either select the variables individually, or you
 can use a regex. Either way, if you want to plot against time, you must select "_time"
 or you will get "No data" errors (ask me how I know ...). An example of regexp that
 selects all grid export power and time is "_time|(Grid export).*\(kWh\)".
@@ -788,6 +794,49 @@ selects all grid export power and time is "_time|(Grid export).*\(kWh\)".
 totals, and the "Organise fields" transform can be useful for hiding intermediate
 values and arranging fields. To see examples of these transforms, check the "Self 
 Consumption Value" summary stat table in the "Usage Detail" example dashboard.
+
+### Performance sidebar
+
+Unfortunately, there are two interacting performance issues that impact grafana 
+presentation of usage engine data. For reference, the performance benchmarks in this 
+section are for a 2013 Celeron NUC with 2GB(?) memory and a SATA SSD.
+
+1) A usage engine query is slower than a normal grafana/influxdb query. This is because
+it includes a set of transform calculations to generate the usage data and another
+set of transforms that convert the usage data to a JSON format for export to grafana.
+While it is definitely possible to improve this performance, it will be at the cost of 
+much harder development effort - I've accepted the performance hit as as consequence
+of simpler development using pandas under python.
+
+    The speed of usage engine responses is non-issue for shorter time intervals 
+  (< 1 month), but becomes significant above this: ~6s for 6 months, 14s for 10 months.
+  This is slower than other Powerwall-Dashboard queries, but still acceptable for most uses. 
+
+    However! Grafana usage panels will timeout if a dashboard includes two usage queries
+with long (6+ months)intervals. 
+
+    To avoid the timeout problem for long interval queries, I recommend using only one
+usage query per dashboard, and then duplicating the query via the grafana Dashboard data
+source. This process is detailed in the previous section. 
+
+2) The second performance problem arises if we want to use a lot of usage panels and we
+use the grafana Dashboard data source (e.g. the example detail dashboard and the v1
+summary dashboard). In this situation, the dashboard loads slowly for all time intervals
+(the first load can be very slow). But, they do load!
+
+There are two possible approaches to addressing the performance problems:
+
+- If you need multiple panels for complex views on the data (e.g. the detailed
+usage dashboard), you will have to accept the slow load times.
+
+- If the data you want to present is simpler, you may be able to rework your dashboard
+to use fewer usage panels. This is the approach taken in the v2 summary dashboard, which
+replaces the 7 panels in the v1 dashboard with 2 panels - albeit at the cost of some
+readability.
+
+In summary, regardless of the approach adopted, you should only use one usage engine 
+query per dashboard and duplicate data to other panels via grafana Dashboard data
+sources. If you don't you may run into panel timeouts.
 
 ## JSON payload
 
