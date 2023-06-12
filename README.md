@@ -114,6 +114,9 @@ ufw allow from 192.168.xxx.0/24 to any port 9050 proto tcp
 
 ## Build Docker Image
 
+As @jasonacox is kindly publishing and hosting docker images of `pwdusage`, this is now
+an optional/troubleshooting step.
+
 I have provided utility scripts to build the docker image for your local machine. 
 Depending on demand, this may become a distributed image in the future. 
 
