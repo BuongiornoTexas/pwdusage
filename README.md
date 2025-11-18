@@ -10,11 +10,11 @@ A usage (mainly time of use) proxy microservice for Powerwall-Dashboard.
 
 # Change Log
 
-I'm tracking progress towards v1.0 at: 
-https://github.com/BuongiornoTexas/pwdusage/issues/1.
+V1.0.1 is a very minor documentation update. From this release forward, minor updates
+like this will not be rolled out to pypi. The github repository should always be
+referred to as the definitive source for documentation.
 
-From v0.9.4, the python/microservice is feature complete. Releases up to v1.0 will 
-address bug fixes and documentation (and incorporate any new agent contributions). 
+From v0.9.4, the python/microservice is feature complete.
 
 ## Breaking
 
@@ -32,6 +32,8 @@ naming consistency.
 
 ## New Features
 
+**v1.0.1** Minor updates on container and grafana urls and docker configuration.
+
 **v1.0.0** 
 - Documentation for building and testing docker image, instructions for adding
 the docker container to the Powerwall-Dashboard stack. 
@@ -47,6 +49,9 @@ range).
 - CLI interface to dump out csv format files for debugging.
 
 # Key Features
+
+Note: The github repository should always be referred to as the definitive source
+for package [documentation](https://github.com/BuongiornoTexas/pwdusage/blob/main/README.md).
 
 The following dot points outline key elements of the usage engine:
 
@@ -209,7 +214,7 @@ the file name for the configuration file. You **must** use this method for runni
 usage server in a **docker container** (most users). See the `pwdusage.extend.yml` and 
 `test_service.sh` files in the previous sections for examples of mapping a local copy of
 `usage.json` to a docker container volume.  
-- If the environment variable is not specified, the enginer will try to load 
+- If the environment variable is not specified, the engine will try to load 
 `usage.json` from the working directory. 
 - If you are running the engine in CLI mode to dump csv files, you **must** specify the
 location of the configuration file (optional path + file name) using the `--config`
@@ -316,7 +321,7 @@ The structure of the settings dictionary is:
 
 The dictionary entries are:
 - [**required**] `influx_url` points at the influx database service, which is typically
-the hostname or address of the Powerwall Dashboard host, with a port of 8086.
+the hostname or address of the Powerwall Dashboard host, with a port of 8086. For a standard docker installation of PWD, this will probably be "http://influxdb:8086/". For rootless docker, you may need something like "http://myhostmachine.local:8086".
 - [**required**] `bucket` is the name of the influx continuous query that supplies data
 for the usage engine. This should have the same fields as the `powerwall/kwh` CQ (the 
 default, which provides data on an hourly basis).
@@ -704,7 +709,9 @@ From the general grafana configuration (cog wheel icon, bottom left):
 - Give it a name - the example dash board uses `JSON Usage`. 
 - Set the URL to: `http://<hostname>:<port>/usage_engine`. The default usage engine port
 is 9050, but you can override this via the docker `.yml` configuration or via 
-`USAGE_PORT` for a stand alone server.
+`USAGE_PORT` for a stand alone server. For a standard install, this will probably be: 
+"http://pwdusage:9050/usage_engine". For a rootless install, something like
+"http://mymachine.local:9050/usage_engine" may be required.
 
   ![image](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/2bfe1062-b7b1-40a4-8870-32ca474a9421)
 
@@ -799,6 +806,10 @@ values and arranging fields. To see examples of these transforms, check the "Sel
 Consumption Value" summary stat table in the "Usage Detail" example dashboard.
 
 ### Performance sidebar
+
+Update: I recently (late 2025) had to give up on rootless docker both for ongoing pain
+with every single thing in it and poor performance. The section is based on rootless
+docker - performance is dramatically better in (standard) rootful docker.
 
 Unfortunately, there are two interacting performance issues that impact grafana 
 presentation of usage engine data. For reference, the performance benchmarks in this 
