@@ -713,6 +713,8 @@ is 9050, but you can override this via the docker `.yml` configuration or via
 "http://pwdusage:9050/usage_engine". For a rootless install, something like
 "http://mymachine.local:9050/usage_engine" may be required.
 
+<img width="671" height="906" alt="image" src="https://github.com/user-attachments/assets/4afdd678-0509-4325-be97-5f92a30f93e5" />
+
   ![image](https://github.com/BuongiornoTexas/pwdusage/assets/48264358/2bfe1062-b7b1-40a4-8870-32ca474a9421)
 
 - Hit "Save and Test". You should see two green tick messages "Datasource updated" and 
